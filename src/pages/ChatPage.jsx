@@ -16,22 +16,23 @@ const getOrCreateSession = () => {
 const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 const LEADERS = [
-  { value: 'ai', label: 'E-Maoni AI Assistant' },
-  { value: 'ward', label: 'Ward Councillor' },
-  { value: 'district', label: 'District Commissioner' },
-  { value: 'regional', label: 'Regional Commissioner' },
-  { value: 'minister', label: 'Minister' },
-  { value: 'president', label: "President's Office" },
+  { value: 'ai', label: 'E-Maoni AI Assistant', labelSw: 'Msaidizi wa AI wa E-Maoni' },
+  { value: 'ward', label: 'Ward Councillor', labelSw: 'Diwani wa Kata' },
+  { value: 'district', label: 'District Commissioner', labelSw: 'Mkuu wa Wilaya' },
+  { value: 'regional', label: 'Regional Commissioner', labelSw: 'Mkuu wa Mkoa' },
+  { value: 'minister', label: 'Minister', labelSw: 'Waziri' },
+  { value: 'president', label: "President's Office", labelSw: 'Ofisi ya Rais' },
 ];
 
 const LOCATIONS = [
-  { value: 'local', label: 'Local Area' },
-  { value: 'district', label: 'District Level' },
-  { value: 'regional', label: 'Regional Level' },
-  { value: 'national', label: 'National Level' },
+  { value: 'local', label: 'Local Area', labelSw: 'Eneo la Mtaa' },
+  { value: 'district', label: 'District Level', labelSw: 'Ngazi ya Wilaya' },
+  { value: 'regional', label: 'Regional Level', labelSw: 'Ngazi ya Mkoa' },
+  { value: 'national', label: 'National Level', labelSw: 'Ngazi ya Taifa' },
 ];
 
-export default function ChatPage({ dark, isMobile = false }) {
+export default function ChatPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
 
   const [mode, setMode] = useState('ai'); // 'ai' | 'barua'
@@ -39,11 +40,15 @@ export default function ChatPage({ dark, isMobile = false }) {
     {
       id: 'welcome_ai',
       from: 'bot',
-      text: 'Hello! I\'m E-Maoni, your AI assistant. Share your issue and I will help you immediately.',
+      text: tr(
+        "Hello! I'm E-Maoni, your AI assistant. Share your issue and I will help you immediately.",
+        'Habari! Mimi ni E-Maoni, msaidizi wako wa AI. Eleza changamoto yako na nitakusaidia mara moja.'
+      ),
       time: new Date(),
     },
   ]);
   const [baruaNotice, setBaruaNotice] = useState('');
+  const [baruaNoticeType, setBaruaNoticeType] = useState('success');
   const [input, setInput] = useState('');
   const [leader, setLeader] = useState('ward');
   const [location, setLocation] = useState('local');
@@ -54,8 +59,14 @@ export default function ChatPage({ dark, isMobile = false }) {
   const [letterBody, setLetterBody] = useState('');
   const bottomRef = useRef(null);
 
-  const leaderLabel = LEADERS.find((item) => item.value === leader)?.label || 'Leader';
-  const locationLabel = LOCATIONS.find((item) => item.value === location)?.label || 'Unspecified';
+  const leaderLabel = (() => {
+    const item = LEADERS.find((entry) => entry.value === leader);
+    return item ? tr(item.label, item.labelSw) : tr('Leader', 'Kiongozi');
+  })();
+  const locationLabel = (() => {
+    const item = LOCATIONS.find((entry) => entry.value === location);
+    return item ? tr(item.label, item.labelSw) : tr('Unspecified', 'Haijabainishwa');
+  })();
   const baruaLeaders = LEADERS.filter((item) => item.value !== 'ai');
   const hasValidReceiver = receivers.some((r) => r.trim());
 
@@ -82,7 +93,10 @@ export default function ChatPage({ dark, isMobile = false }) {
         {
           id: `err_${Date.now()}`,
           from: 'bot',
-          text: 'Sorry, I encountered an issue. Please try again.',
+          text: tr(
+            'Sorry, I encountered an issue. Please try again.',
+            'Samahani, kumetokea hitilafu. Tafadhali jaribu tena.'
+          ),
           time: new Date(),
         },
       ]);
@@ -93,10 +107,22 @@ export default function ChatPage({ dark, isMobile = false }) {
     mutationFn: (data) => complaintsAPI.createLetter(data),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['complaints'] });
-      setBaruaNotice(`Formal letter submitted to ${leaderLabel}. Reference ID: #${data.id}.`);
+      setBaruaNoticeType('success');
+      setBaruaNotice(
+        tr(
+          `Formal letter submitted to ${leaderLabel}. Reference ID: #${data.id}.`,
+          `Barua rasmi imetumwa kwa ${leaderLabel}. Namba ya rejea: #${data.id}.`
+        )
+      );
     },
     onError: () => {
-      setBaruaNotice('Letter submission failed. Please check required fields and try again.');
+      setBaruaNoticeType('error');
+      setBaruaNotice(
+        tr(
+          'Letter submission failed. Please check required fields and try again.',
+          'Kutuma barua kumeshindikana. Tafadhali hakiki sehemu muhimu kisha jaribu tena.'
+        )
+      );
     },
   });
 
@@ -143,6 +169,7 @@ export default function ChatPage({ dark, isMobile = false }) {
     });
 
     setBaruaNotice('');
+    setBaruaNoticeType('success');
     setSenderPO('');
     setLetterHead('');
     setLetterBody('');
@@ -201,9 +228,11 @@ export default function ChatPage({ dark, isMobile = false }) {
           boxShadow: '0 2px 5px rgba(0,0,0,0.04)',
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: isMobile ? 20 : 22, marginBottom: 3 }}>Chats</div>
+        <div style={{ fontWeight: 600, fontSize: isMobile ? 20 : 22, marginBottom: 3 }}>{tr('Chats', 'Mazungumzo')}</div>
         <div style={{ fontSize: isMobile ? 13 : 14, color: textSub }}>
-          {mode === 'ai' ? 'AI support conversation' : 'Barua formal letter portal'}
+          {mode === 'ai'
+            ? tr('AI support conversation', 'Mazungumzo ya msaada wa AI')
+            : tr('Barua formal letter portal', 'Tovuti ya barua rasmi')}
         </div>
       </div>
 
@@ -388,7 +417,7 @@ export default function ChatPage({ dark, isMobile = false }) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
               disabled={isSendingMessage}
-              placeholder="Ask the AI assistant..."
+              placeholder={tr('Ask the AI assistant...', 'Muulize msaidizi wa AI...')}
               rows={isMobile ? 3 : 2}
               style={{
                 flex: 1,
@@ -448,11 +477,11 @@ export default function ChatPage({ dark, isMobile = false }) {
               <div
                 style={{
                   marginBottom: 12,
-                  background: baruaNotice.includes('failed') ? '#fee2e2' : '#dcfce7',
-                  border: `1px solid ${baruaNotice.includes('failed') ? '#fca5a5' : '#86efac'}`,
+                  background: baruaNoticeType === 'error' ? '#fee2e2' : '#dcfce7',
+                  border: `1px solid ${baruaNoticeType === 'error' ? '#fca5a5' : '#86efac'}`,
                   borderRadius: 10,
                   padding: isMobile ? 12 : 14,
-                  color: baruaNotice.includes('failed') ? '#991b1b' : '#166534',
+                  color: baruaNoticeType === 'error' ? '#991b1b' : '#166534',
                   fontSize: 13,
                   fontWeight: 500,
                 }}
@@ -471,24 +500,24 @@ export default function ChatPage({ dark, isMobile = false }) {
             >
               <div>
                 <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                  Send to:
+                  {tr('Send to:', 'Tuma kwa:')}
                 </label>
                 <select value={leader} onChange={(e) => setLeader(e.target.value)} style={selectStyle}>
                   {baruaLeaders.map((l) => (
                     <option key={l.value} value={l.value}>
-                      {l.label}
+                      {tr(l.label, l.labelSw)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                  Location:
+                  {tr('Location:', 'Mahali:')}
                 </label>
                 <select value={location} onChange={(e) => setLocation(e.target.value)} style={selectStyle}>
                   {LOCATIONS.map((l) => (
                     <option key={l.value} value={l.value}>
-                      {l.label}
+                      {tr(l.label, l.labelSw)}
                     </option>
                   ))}
                 </select>
@@ -515,25 +544,25 @@ export default function ChatPage({ dark, isMobile = false }) {
                   transition: 'all 0.2s',
                 }}
               >
-                <i className="fas fa-paper-plane" /> {isSendingLetter ? 'Sending...' : 'Send'}
+                <i className="fas fa-paper-plane" /> {isSendingLetter ? tr('Sending...', 'Inatuma...') : tr('Send', 'Tuma')}
               </button>
             </div>
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                Your PO Box
+                {tr('Your PO Box', 'Sanduku lako la Posta')}
               </label>
               <input
                 value={senderPO}
                 onChange={(e) => setSenderPO(e.target.value)}
-                placeholder="e.g., P.O. Box 12345"
+                placeholder={tr('e.g., P.O. Box 12345', 'mfano, S.L.P 12345')}
                 style={inputStyle}
               />
             </div>
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                Receiver's PO Box
+                {tr("Receiver's PO Box", 'Sanduku la Posta la Mpokeaji')}
               </label>
               {receivers.map((r, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -544,7 +573,7 @@ export default function ChatPage({ dark, isMobile = false }) {
                       updated[i] = e.target.value;
                       setReceivers(updated);
                     }}
-                    placeholder="e.g., P.O. Box 67890"
+                    placeholder={tr('e.g., P.O. Box 67890', 'mfano, S.L.P 67890')}
                     style={{ ...inputStyle, flex: 1 }}
                   />
                   {receivers.length > 1 && (
@@ -581,18 +610,18 @@ export default function ChatPage({ dark, isMobile = false }) {
                   gap: 6,
                 }}
               >
-                <i className="fas fa-plus" /> Add another receiver
+                <i className="fas fa-plus" /> {tr('Add another receiver', 'Ongeza mpokeaji mwingine')}
               </button>
             </div>
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                Letter Head / Subject
+                {tr('Letter Head / Subject', 'Kichwa cha Barua / Mada')}
               </label>
               <input
                 value={letterHead}
                 onChange={(e) => setLetterHead(e.target.value)}
-                placeholder="e.g., Complaint about service delivery"
+                placeholder={tr('e.g., Complaint about service delivery', 'mfano, Malalamiko kuhusu utoaji wa huduma')}
                 style={inputStyle}
               />
             </div>
@@ -608,13 +637,13 @@ export default function ChatPage({ dark, isMobile = false }) {
                   paddingRight: 0,
                 }}
               >
-                Letter Content
+                {tr('Letter Content', 'Maudhui ya Barua')}
               </label>
               <textarea
                 value={letterBody}
                 onChange={(e) => setLetterBody(e.target.value)}
                 rows={isMobile ? 5 : 4}
-                placeholder="Write your letter here..."
+                placeholder={tr('Write your letter here...', 'Andika barua yako hapa...')}
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
               />
             </div>

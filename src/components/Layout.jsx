@@ -2,16 +2,17 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 const MOBILE_BREAKPOINT = 900;
+const LANGUAGE_KEY = 'emaoni_language';
 
 const navItems = [
-  { path: '/chat', icon: 'fa-comments', label: 'Chats' },
-  { path: '/inbox', icon: 'fa-inbox', label: 'Inbox' },
-  { path: '/unreplied', icon: 'fa-exclamation-circle', label: 'Unreplied' },
-  { path: '/history', icon: 'fa-history', label: 'History' },
-  { path: '/escalation', icon: 'fa-level-up-alt', label: 'Escalation' },
-  { path: '/faqs', icon: 'fa-question-circle', label: 'FAQs' },
-  { path: '/leader/register', icon: 'fa-user-plus', label: 'Leader Register' },
-  { path: '/leader/portal', icon: 'fa-user-shield', label: 'Leader Portal' },
+  { path: '/chat', icon: 'fa-comments', label: 'Chats', labelSw: 'Mazungumzo' },
+  { path: '/inbox', icon: 'fa-inbox', label: 'Inbox', labelSw: 'Ujumbe' },
+  { path: '/unreplied', icon: 'fa-exclamation-circle', label: 'Unreplied', labelSw: 'Bila Majibu' },
+  { path: '/history', icon: 'fa-history', label: 'History', labelSw: 'Historia' },
+  { path: '/escalation', icon: 'fa-level-up-alt', label: 'Escalation', labelSw: 'Ngazi za Rufaa' },
+  { path: '/faqs', icon: 'fa-question-circle', label: 'FAQs', labelSw: 'Maswali' },
+  { path: '/leader/register', icon: 'fa-user-plus', label: 'Leader Register', labelSw: 'Sajili Kiongozi' },
+  { path: '/leader/portal', icon: 'fa-user-shield', label: 'Leader Portal', labelSw: 'Tovuti ya Kiongozi' },
 ];
 
 const getInitialMobile = () => {
@@ -22,8 +23,14 @@ const getInitialMobile = () => {
 export default function Layout({ children }) {
   const location = useLocation();
   const [dark, setDark] = useState(false);
+  const [language, setLanguage] = useState(() => {
+    if (typeof window === 'undefined') return 'en';
+    const cached = window.localStorage.getItem(LANGUAGE_KEY);
+    return cached === 'sw' ? 'sw' : 'en';
+  });
   const [isMobile, setIsMobile] = useState(getInitialMobile);
   const [sidebarOpen, setSidebarOpen] = useState(!getInitialMobile());
+  const tx = (en, sw) => (language === 'sw' ? sw : en);
 
   useEffect(() => {
     const onResize = () => {
@@ -46,6 +53,15 @@ export default function Layout({ children }) {
   }, [location.pathname, isMobile]);
 
   const toggleDark = () => setDark((prev) => !prev);
+  const toggleLanguage = () => {
+    setLanguage((prev) => (prev === 'en' ? 'sw' : 'en'));
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(LANGUAGE_KEY, language);
+    }
+  }, [language]);
 
   const sidebarStyle = isMobile
     ? {
@@ -77,7 +93,7 @@ export default function Layout({ children }) {
     >
       {isMobile && sidebarOpen && (
         <button
-          aria-label="Close menu"
+          aria-label={tx('Close menu', 'Funga menyu')}
           onClick={() => setSidebarOpen(false)}
           style={{
             position: 'fixed',
@@ -138,7 +154,7 @@ export default function Layout({ children }) {
           </div>
           {isMobile && (
             <button
-              aria-label="Close menu"
+              aria-label={tx('Close menu', 'Funga menyu')}
               onClick={() => setSidebarOpen(false)}
               style={{
                 width: 36,
@@ -157,7 +173,7 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: isMobile ? '12px 0' : '20px 0', overflowY: 'auto' }}>
-          {navItems.map(({ path, icon, label }) => (
+          {navItems.map(({ path, icon, label, labelSw }) => (
             <NavLink
               key={path}
               to={path}
@@ -188,10 +204,35 @@ export default function Layout({ children }) {
               }}
             >
               <i className={`fas ${icon}`} style={{ width: 24, marginRight: 12, fontSize: 17, textAlign: 'center' }} />
-              {label}
+              {tx(label, labelSw)}
             </NavLink>
           ))}
         </nav>
+
+        {/* Language toggle */}
+        <div
+          style={{
+            padding: isMobile ? '8px 16px 0 16px' : '12px 20px 0 20px',
+            borderTop: `1px solid ${dark ? '#334155' : '#e2e8f0'}`,
+          }}
+        >
+          <button
+            onClick={toggleLanguage}
+            style={{
+              width: '100%',
+              borderRadius: 8,
+              border: `1px solid ${dark ? '#475569' : '#cbd5e1'}`,
+              background: dark ? '#0f172a' : '#f8fafc',
+              color: dark ? '#e2e8f0' : '#334155',
+              padding: '8px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {language === 'en' ? 'Switch to Swahili' : 'Badili kwenda English'}
+          </button>
+        </div>
 
         {/* Dark mode toggle */}
         <div
@@ -267,7 +308,7 @@ export default function Layout({ children }) {
             }}
           >
             <button
-              aria-label="Open menu"
+              aria-label={tx('Open menu', 'Fungua menyu')}
               onClick={() => setSidebarOpen(true)}
               style={{
                 width: 38,
@@ -292,7 +333,7 @@ export default function Layout({ children }) {
               e-maoni
             </span>
             <button
-              aria-label="Toggle theme"
+              aria-label={tx('Toggle theme', 'Badili mwonekano')}
               onClick={toggleDark}
               style={{
                 width: 38,
@@ -309,7 +350,7 @@ export default function Layout({ children }) {
           </div>
         )}
 
-        {children({ dark, isMobile })}
+        {children({ dark, isMobile, language, tx })}
       </div>
     </div>
   );

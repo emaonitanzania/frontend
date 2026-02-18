@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { complaintsAPI, getSessionId } from '../services/api';
 
 // InboxPage.jsx
-export function InboxPage({ dark, isMobile = false }) {
+export function InboxPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const border = dark ? '#334155' : '#e2e8f0';
   const textSub = dark ? '#94a3b8' : '#64748b';
   const sessionId = useMemo(() => getSessionId(), []);
@@ -17,12 +18,17 @@ export function InboxPage({ dark, isMobile = false }) {
 
   return (
     <>
-      <PageHeader dark={dark} isMobile={isMobile} title="Inbox" subtitle="Replied complaints from different leaders" />
+      <PageHeader
+        dark={dark}
+        isMobile={isMobile}
+        title={tr('Inbox', 'Ujumbe')}
+        subtitle={tr('Replied complaints from different leaders', 'Malalamiko yaliyojibiwa na viongozi mbalimbali')}
+      />
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {!sessionId && <StateBlock dark={dark} label="No active session found. Send a message first." />}
-        {sessionId && isLoading && <StateBlock dark={dark} label="Loading inbox..." />}
-        {sessionId && isError && <StateBlock dark={dark} label="Unable to load inbox messages." isError />}
-        {sessionId && !isLoading && !isError && data.length === 0 && <StateBlock dark={dark} label="No replies yet." />}
+        {!sessionId && <StateBlock dark={dark} label={tr('No active session found. Send a message first.', 'Hakuna sesi hai. Tuma ujumbe kwanza.')} />}
+        {sessionId && isLoading && <StateBlock dark={dark} label={tr('Loading inbox...', 'Inapakia ujumbe...')} />}
+        {sessionId && isError && <StateBlock dark={dark} label={tr('Unable to load inbox messages.', 'Imeshindwa kupakia ujumbe.')} isError />}
+        {sessionId && !isLoading && !isError && data.length === 0 && <StateBlock dark={dark} label={tr('No replies yet.', 'Bado hakuna majibu.')} />}
 
         {sessionId && !isLoading && !isError && data.map((m) => (
           <div
@@ -107,7 +113,8 @@ export function InboxPage({ dark, isMobile = false }) {
 }
 
 // UnrepliedPage.jsx
-export function UnrepliedPage({ dark, isMobile = false }) {
+export function UnrepliedPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const border = dark ? '#334155' : '#e2e8f0';
   const textSub = dark ? '#94a3b8' : '#64748b';
   const sessionId = useMemo(() => getSessionId(), []);
@@ -121,13 +128,18 @@ export function UnrepliedPage({ dark, isMobile = false }) {
 
   return (
     <>
-      <PageHeader dark={dark} isMobile={isMobile} title="Unreplied" subtitle="Messages awaiting response from leaders" />
+      <PageHeader
+        dark={dark}
+        isMobile={isMobile}
+        title={tr('Unreplied', 'Bila Majibu')}
+        subtitle={tr('Messages awaiting response from leaders', 'Ujumbe unaosubiri majibu ya viongozi')}
+      />
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {!sessionId && <StateBlock dark={dark} label="No active session found. Send a message first." />}
-        {sessionId && isLoading && <StateBlock dark={dark} label="Loading unreplied messages..." />}
-        {sessionId && isError && <StateBlock dark={dark} label="Unable to load unreplied messages." isError />}
+        {!sessionId && <StateBlock dark={dark} label={tr('No active session found. Send a message first.', 'Hakuna sesi hai. Tuma ujumbe kwanza.')} />}
+        {sessionId && isLoading && <StateBlock dark={dark} label={tr('Loading unreplied messages...', 'Inapakia ujumbe usiojibiwa...')} />}
+        {sessionId && isError && <StateBlock dark={dark} label={tr('Unable to load unreplied messages.', 'Imeshindwa kupakia ujumbe usiojibiwa.')} isError />}
         {sessionId && !isLoading && !isError && data.length === 0 && (
-          <StateBlock dark={dark} label="No pending complaints. Everything has a response." />
+          <StateBlock dark={dark} label={tr('No pending complaints. Everything has a response.', 'Hakuna malalamiko yanayosubiri. Kila kitu kimejibiwa.')} />
         )}
 
         {sessionId && !isLoading && !isError && data.map((item) => (
@@ -170,7 +182,7 @@ export function UnrepliedPage({ dark, isMobile = false }) {
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 3 }}>{item.subject}</div>
-                <div style={{ fontSize: 13, color: textSub }}>To: {item.to} | Sent: {item.sent}</div>
+                <div style={{ fontSize: 13, color: textSub }}>{tr('To', 'Kwa')}: {item.to} | {tr('Sent', 'Imetumwa')}: {item.sent}</div>
               </div>
             </div>
             <div style={{ textAlign: isMobile ? 'left' : 'right', flexShrink: 0, marginLeft: isMobile ? 0 : 16 }}>
@@ -185,7 +197,7 @@ export function UnrepliedPage({ dark, isMobile = false }) {
                   display: 'inline-block',
                 }}
               >
-                {item.days} days
+                {item.days} {tr('days', 'siku')}
               </div>
               <button
                 style={{
@@ -200,7 +212,7 @@ export function UnrepliedPage({ dark, isMobile = false }) {
                   display: 'block',
                 }}
               >
-                Resend
+                {tr('Resend', 'Tuma Tena')}
               </button>
             </div>
           </div>
@@ -211,7 +223,8 @@ export function UnrepliedPage({ dark, isMobile = false }) {
 }
 
 // HistoryPage.jsx
-export function HistoryPage({ dark, isMobile = false }) {
+export function HistoryPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const border = dark ? '#334155' : '#e2e8f0';
   const textSub = dark ? '#94a3b8' : '#64748b';
   const sessionId = useMemo(() => getSessionId(), []);
@@ -225,12 +238,17 @@ export function HistoryPage({ dark, isMobile = false }) {
 
   return (
     <>
-      <PageHeader dark={dark} isMobile={isMobile} title="History" subtitle="All messages and letters you have sent" />
+      <PageHeader
+        dark={dark}
+        isMobile={isMobile}
+        title={tr('History', 'Historia')}
+        subtitle={tr('All messages and letters you have sent', 'Ujumbe na barua zote ulizotuma')}
+      />
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {!sessionId && <StateBlock dark={dark} label="No active session found. Send a message first." />}
-        {sessionId && isLoading && <StateBlock dark={dark} label="Loading history..." />}
-        {sessionId && isError && <StateBlock dark={dark} label="Unable to load history." isError />}
-        {sessionId && !isLoading && !isError && data.length === 0 && <StateBlock dark={dark} label="No history found yet." />}
+        {!sessionId && <StateBlock dark={dark} label={tr('No active session found. Send a message first.', 'Hakuna sesi hai. Tuma ujumbe kwanza.')} />}
+        {sessionId && isLoading && <StateBlock dark={dark} label={tr('Loading history...', 'Inapakia historia...')} />}
+        {sessionId && isError && <StateBlock dark={dark} label={tr('Unable to load history.', 'Imeshindwa kupakia historia.')} isError />}
+        {sessionId && !isLoading && !isError && data.length === 0 && <StateBlock dark={dark} label={tr('No history found yet.', 'Bado hakuna historia.')} />}
 
         {sessionId && !isLoading && !isError && data.map((item) => (
           <div
@@ -272,9 +290,9 @@ export function HistoryPage({ dark, isMobile = false }) {
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 500, fontSize: 14 }}>To: {item.to}</span>
+                  <span style={{ fontWeight: 500, fontSize: 14 }}>{tr('To', 'Kwa')}: {item.to}</span>
                   <Badge label={item.badge} isAI={item.badge === 'AI'} dark={dark} />
-                  {item.type === 'letter' && <Badge label="Letter" isLetter dark={dark} />}
+                  {item.type === 'letter' && <Badge label={tr('Letter', 'Barua')} isLetter dark={dark} />}
                 </div>
                 <div style={{ fontSize: 13, color: textSub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {item.text}
@@ -290,7 +308,8 @@ export function HistoryPage({ dark, isMobile = false }) {
 }
 
 // EscalationPage.jsx
-export function EscalationPage({ dark, isMobile = false }) {
+export function EscalationPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const border = dark ? '#334155' : '#e2e8f0';
   const surface = dark ? '#1e293b' : '#ffffff';
   const textSub = dark ? '#94a3b8' : '#64748b';
@@ -330,8 +349,8 @@ export function EscalationPage({ dark, isMobile = false }) {
       <PageHeader
         dark={dark}
         isMobile={isMobile}
-        title="Escalation Tracking"
-        subtitle="Track how your complaints escalate through leadership levels"
+        title={tr('Escalation Tracking', 'Ufuatiliaji wa Rufaa')}
+        subtitle={tr('Track how your complaints escalate through leadership levels', 'Fuatilia jinsi malalamiko yako yanavyopandishwa ngazi za uongozi')}
       />
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 10px' : '24px 30px' }}>
         <div
@@ -344,11 +363,11 @@ export function EscalationPage({ dark, isMobile = false }) {
             margin: '0 auto',
           }}
         >
-          {!sessionId && <StateBlock dark={dark} label="No active session found. Send a message first." />}
-          {sessionId && complaintsQuery.isLoading && <StateBlock dark={dark} label="Loading complaints..." />}
-          {sessionId && complaintsQuery.isError && <StateBlock dark={dark} label="Unable to load complaints." isError />}
+          {!sessionId && <StateBlock dark={dark} label={tr('No active session found. Send a message first.', 'Hakuna sesi hai. Tuma ujumbe kwanza.')} />}
+          {sessionId && complaintsQuery.isLoading && <StateBlock dark={dark} label={tr('Loading complaints...', 'Inapakia malalamiko...')} />}
+          {sessionId && complaintsQuery.isError && <StateBlock dark={dark} label={tr('Unable to load complaints.', 'Imeshindwa kupakia malalamiko.')} isError />}
           {sessionId && !complaintsQuery.isLoading && !complaintsQuery.isError && complaints.length === 0 && (
-            <StateBlock dark={dark} label="No complaints available for escalation tracking." />
+            <StateBlock dark={dark} label={tr('No complaints available for escalation tracking.', 'Hakuna malalamiko ya kufuatilia rufaa.')} />
           )}
 
           {sessionId && !complaintsQuery.isLoading && !complaintsQuery.isError && complaints.length > 0 && (
@@ -363,7 +382,7 @@ export function EscalationPage({ dark, isMobile = false }) {
                   marginBottom: 20,
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 16 }}>Complaint Escalation Timeline</div>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>{tr('Complaint Escalation Timeline', 'Ratiba ya Kupanda Ngazi ya Malalamiko')}</div>
                 <select
                   value={selectedComplaintId || ''}
                   onChange={(e) => setSelectedComplaintId(Number(e.target.value))}
@@ -386,8 +405,8 @@ export function EscalationPage({ dark, isMobile = false }) {
                 </select>
               </div>
 
-              {timelineQuery.isLoading && <StateBlock dark={dark} label="Loading timeline..." />}
-              {timelineQuery.isError && <StateBlock dark={dark} label="Unable to load timeline." isError />}
+              {timelineQuery.isLoading && <StateBlock dark={dark} label={tr('Loading timeline...', 'Inapakia ratiba...')} />}
+              {timelineQuery.isError && <StateBlock dark={dark} label={tr('Unable to load timeline.', 'Imeshindwa kupakia ratiba.')} isError />}
 
               {!timelineQuery.isLoading && !timelineQuery.isError && (
                 <div style={{ position: 'relative' }}>
@@ -470,12 +489,38 @@ export function EscalationPage({ dark, isMobile = false }) {
 }
 
 // FAQsPage.jsx
-export function FAQsPage({ dark, isMobile = false }) {
+export function FAQsPage({ dark, isMobile = false, language = 'en', tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const [open, setOpen] = useState(null);
   const border = dark ? '#334155' : '#e2e8f0';
   const textSub = dark ? '#94a3b8' : '#64748b';
 
-  const faqs = [
+  const faqs = language === 'sw' ? [
+    {
+      q: 'Ninawezaje kuwasilisha malalamiko?',
+      a: 'Nenda kwenye sehemu ya Mazungumzo, andika malalamiko yako kwenye kisanduku cha ujumbe kisha bonyeza Tuma, au tumia Barua kuandika barua rasmi.',
+    },
+    {
+      q: 'Tofauti kati ya Ujumbe na Barua ni ipi?',
+      a: '"Ujumbe" ni kwa mawasiliano ya haraka kwa AI au viongozi maalum. "Barua" ni kuandaa barua rasmi yenye taarifa za S.L.P.',
+    },
+    {
+      q: 'Inachukua muda gani kupata majibu?',
+      a: 'Majibu ya AI hupatikana papo hapo. Majibu ya viongozi yanatarajiwa ndani ya siku 3 za kazi. Yasipopatikana, malalamiko yatapandishwa ngazi kiotomatiki.',
+    },
+    {
+      q: 'Nini hutokea kama malalamiko yangu hayajibiwi?',
+      a: 'Malalamiko yasiyopata jibu ndani ya siku 3 hupandishwa ngazi kwa mamlaka ya juu na mfumo huweka kumbukumbu ya kiongozi ambaye hajajibu.',
+    },
+    {
+      q: 'Naweza kutuma malalamiko bila kujitambulisha?',
+      a: 'Ndiyo. Unaweza kutuma malalamiko bila kusajili akaunti. Usajili unahitajika kwa viongozi tu.',
+    },
+    {
+      q: 'Msaidizi wa AI anasaidiaje?',
+      a: 'AI hutafuta maelfu ya malalamiko yaliyotatuliwa ili kukupa majibu ya haraka, mapendekezo ya suluhisho, na kusaidia kuandika barua rasmi.',
+    },
+  ] : [
     {
       q: 'How do I submit a complaint?',
       a: 'Go to the Chats section, type your complaint in the message box and click Send, or use the Barua option to compose a formal letter.',
@@ -504,7 +549,7 @@ export function FAQsPage({ dark, isMobile = false }) {
 
   return (
     <>
-      <PageHeader dark={dark} isMobile={isMobile} title="FAQs" subtitle="Frequently Asked Questions" />
+      <PageHeader dark={dark} isMobile={isMobile} title={tr('FAQs', 'Maswali')} subtitle={tr('Frequently Asked Questions', 'Maswali Yanayoulizwa Mara kwa Mara')} />
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '4px 0' : '8px 0' }}>
         {faqs.map((faq, i) => (
           <div

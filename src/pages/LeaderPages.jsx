@@ -14,7 +14,13 @@ import {
   setLeaderAuth,
 } from '../services/api';
 
-const LEVEL_OPTIONS = ['Ward', 'District', 'Regional', 'Ministerial', 'Presidential'];
+const LEVEL_OPTIONS = [
+  { value: 'Ward', label: 'Ward', labelSw: 'Kata' },
+  { value: 'District', label: 'District', labelSw: 'Wilaya' },
+  { value: 'Regional', label: 'Regional', labelSw: 'Mkoa' },
+  { value: 'Ministerial', label: 'Ministerial', labelSw: 'Wizara' },
+  { value: 'Presidential', label: 'Presidential', labelSw: 'Urais' },
+];
 
 const formatDateTime = (value) => {
   if (!value) return '--';
@@ -23,7 +29,8 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString();
 };
 
-export function LeaderRegisterPage({ dark, isMobile = false }) {
+export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
   const [adminToken, setAdminToken] = useState(() => getAdminToken());
   const [adminLoginForm, setAdminLoginForm] = useState({ email: '', password: '' });
@@ -62,7 +69,10 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
     mutationFn: adminAPI.registerLeader,
     onSuccess: (data) => {
       setRegistrationSuccess(
-        `Leader account created for ${data?.leader?.full_name || form.full_name}.`,
+        tr(
+          `Leader account created for ${data?.leader?.full_name || form.full_name}.`,
+          `Akaunti ya kiongozi imeundwa kwa ${data?.leader?.full_name || form.full_name}.`,
+        ),
       );
       queryClient.invalidateQueries({ queryKey: ['complaints'] });
       setForm({
@@ -144,14 +154,19 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
       <PageHeader
         dark={dark}
         isMobile={isMobile}
-        title="Leader Registration"
-        subtitle="Create a leader account to manage and respond to citizen complaints"
+        title={tr('Leader Registration', 'Usajili wa Kiongozi')}
+        subtitle={tr(
+          'Create a leader account to manage and respond to citizen complaints',
+          'Unda akaunti ya kiongozi ili kusimamia na kujibu malalamiko ya wananchi',
+        )}
       />
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 10px 20px 10px' : '24px 30px' }}>
         {!adminToken && (
           <form onSubmit={onAdminSubmit} style={{ ...cardStyle, maxWidth: 540, marginBottom: 14 }}>
-            <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>Superuser Login Required</div>
-            <Field label="Admin Email" dark={dark}>
+            <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>
+              {tr('Superuser Login Required', 'Inahitaji Kuingia kama Superuser')}
+            </div>
+            <Field label={tr('Admin Email', 'Barua Pepe ya Admin')} dark={dark}>
               <input
                 required
                 type="email"
@@ -160,7 +175,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Password" dark={dark}>
+            <Field label={tr('Password', 'Nenosiri')} dark={dark}>
               <input
                 required
                 type="password"
@@ -189,7 +204,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                   fontWeight: 600,
                 }}
               >
-                {adminLoginMutation.isPending ? 'Signing in...' : 'Sign In as Superuser'}
+                {adminLoginMutation.isPending ? tr('Signing in...', 'Inaingia...') : tr('Sign In as Superuser', 'Ingia kama Superuser')}
               </button>
             </div>
           </form>
@@ -210,7 +225,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
           >
             <div>
               <div style={{ fontSize: 15, fontWeight: 600 }}>
-                {adminMeQuery.data?.username || cachedAdminProfile?.username || 'Superuser'}
+                {adminMeQuery.data?.username || cachedAdminProfile?.username || tr('Superuser', 'Superuser')}
               </div>
               <div style={{ fontSize: 13, color: textSub }}>
                 {adminMeQuery.data?.email || cachedAdminProfile?.email || '--'}
@@ -229,7 +244,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 fontWeight: 600,
               }}
             >
-              Logout Superuser
+              {tr('Logout Superuser', 'Toka kama Superuser')}
             </button>
           </div>
         )}
@@ -243,7 +258,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
               gap: 12,
             }}
           >
-            <Field label="Username" dark={dark}>
+            <Field label={tr('Username', 'Jina la Mtumiaji')} dark={dark}>
               <input
                 required
                 value={form.username}
@@ -251,7 +266,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Email" dark={dark}>
+            <Field label={tr('Email', 'Barua Pepe')} dark={dark}>
               <input
                 required
                 type="email"
@@ -260,7 +275,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Password" dark={dark}>
+            <Field label={tr('Password', 'Nenosiri')} dark={dark}>
               <input
                 required
                 type="password"
@@ -269,7 +284,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Confirm Password" dark={dark}>
+            <Field label={tr('Confirm Password', 'Thibitisha Nenosiri')} dark={dark}>
               <input
                 required
                 type="password"
@@ -278,7 +293,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Full Name" dark={dark}>
+            <Field label={tr('Full Name', 'Jina Kamili')} dark={dark}>
               <input
                 required
                 value={form.full_name}
@@ -286,29 +301,29 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Title" dark={dark}>
+            <Field label={tr('Title', 'Cheo')} dark={dark}>
               <input
                 required
-                placeholder="e.g. District Commissioner"
+                placeholder={tr('e.g. District Commissioner', 'mfano, Mkuu wa Wilaya')}
                 value={form.title}
                 onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Level" dark={dark}>
+            <Field label={tr('Level', 'Ngazi')} dark={dark}>
               <select
                 value={form.level}
                 onChange={(e) => setForm((prev) => ({ ...prev, level: e.target.value }))}
                 style={fieldStyle}
               >
                 {LEVEL_OPTIONS.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
+                  <option key={level.value} value={level.value}>
+                    {tr(level.label, level.labelSw)}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Location" dark={dark}>
+            <Field label={tr('Location', 'Mahali')} dark={dark}>
               <input
                 required
                 value={form.location}
@@ -316,7 +331,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 style={fieldStyle}
               />
             </Field>
-            <Field label="Phone (optional)" dark={dark}>
+            <Field label={tr('Phone (optional)', 'Simu (si lazima)')} dark={dark}>
               <input
                 value={form.phone}
                 onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
@@ -347,7 +362,10 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
             }}
           >
             <span style={{ color: textSub, fontSize: 13 }}>
-              Leader account exists? <Link to="/leader/portal" style={{ color: '#2563eb' }}>Open Leader Portal</Link>
+              {tr('Leader account exists?', 'Akaunti ya kiongozi ipo?')}{' '}
+              <Link to="/leader/portal" style={{ color: '#2563eb' }}>
+                {tr('Open Leader Portal', 'Fungua Tovuti ya Kiongozi')}
+              </Link>
             </span>
             <button
               type="submit"
@@ -363,7 +381,7 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
                 fontWeight: 600,
               }}
             >
-              {registerMutation.isPending ? 'Creating...' : 'Create Leader Account'}
+              {registerMutation.isPending ? tr('Creating...', 'Inaunda...') : tr('Create Leader Account', 'Unda Akaunti ya Kiongozi')}
             </button>
           </div>
         </form>
@@ -373,7 +391,8 @@ export function LeaderRegisterPage({ dark, isMobile = false }) {
   );
 }
 
-export function LeaderPortalPage({ dark, isMobile = false }) {
+export function LeaderPortalPage({ dark, isMobile = false, tx }) {
+  const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
   const [token, setToken] = useState(() => getLeaderToken());
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
@@ -474,8 +493,11 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
       <PageHeader
         dark={dark}
         isMobile={isMobile}
-        title="Leader Portal"
-        subtitle="Review assigned complaints and send official responses to citizens"
+        title={tr('Leader Portal', 'Tovuti ya Kiongozi')}
+        subtitle={tr(
+          'Review assigned complaints and send official responses to citizens',
+          'Pitia malalamiko uliyopewa na tuma majibu rasmi kwa wananchi',
+        )}
       />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 10px 20px 10px' : '24px 30px' }}>
@@ -491,9 +513,11 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
               padding: isMobile ? 14 : 22,
             }}
           >
-            <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>Leader Login</div>
+            <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>
+              {tr('Leader Login', 'Kuingia kwa Kiongozi')}
+            </div>
 
-            <Field label="Username" dark={dark}>
+            <Field label={tr('Username', 'Jina la Mtumiaji')} dark={dark}>
               <input
                 required
                 value={loginForm.username}
@@ -502,7 +526,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
               />
             </Field>
 
-            <Field label="Password" dark={dark}>
+            <Field label={tr('Password', 'Nenosiri')} dark={dark}>
               <input
                 required
                 type="password"
@@ -514,7 +538,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
 
             {loginMutation.error && (
               <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 10 }}>
-                {loginMutation.error?.response?.data?.error || 'Unable to log in.'}
+                {loginMutation.error?.response?.data?.error || tr('Unable to log in.', 'Imeshindwa kuingia.')}
               </div>
             )}
 
@@ -535,7 +559,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                   alignSelf: isMobile ? 'flex-start' : 'center',
                 }}
               >
-                Register new leader
+                {tr('Register new leader', 'Sajili kiongozi mpya')}
               </Link>
               <button
                 type="submit"
@@ -553,7 +577,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                   fontWeight: 600,
                 }}
               >
-                {loginMutation.isPending ? 'Signing in...' : 'Sign In'}
+                {loginMutation.isPending ? tr('Signing in...', 'Inaingia...') : tr('Sign In', 'Ingia')}
               </button>
             </div>
           </form>
@@ -573,10 +597,10 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 600 }}>
-                    {meQuery.data?.full_name || cachedProfile?.full_name || 'Leader'}
+                    {meQuery.data?.full_name || cachedProfile?.full_name || tr('Leader', 'Kiongozi')}
                   </div>
                   <div style={{ fontSize: 13, color: textSub }}>
-                    {(meQuery.data?.title || cachedProfile?.title || 'Leader')} | {(meQuery.data?.level || cachedProfile?.level || '--')} | {(meQuery.data?.location || cachedProfile?.location || '--')}
+                    {(meQuery.data?.title || cachedProfile?.title || tr('Leader', 'Kiongozi'))} | {(meQuery.data?.level || cachedProfile?.level || '--')} | {(meQuery.data?.location || cachedProfile?.location || '--')}
                   </div>
                 </div>
                 <button
@@ -592,15 +616,15 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                     fontWeight: 600,
                   }}
                 >
-                  Logout
+                  {tr('Logout', 'Toka')}
                 </button>
               </div>
             </div>
 
-            {assignedQuery.isLoading && <StateBlock dark={dark} label="Loading assigned complaints..." />}
-            {assignedQuery.isError && <StateBlock dark={dark} label="Unable to load assigned complaints." isError />}
+            {assignedQuery.isLoading && <StateBlock dark={dark} label={tr('Loading assigned complaints...', 'Inapakia malalamiko uliyopewa...')} />}
+            {assignedQuery.isError && <StateBlock dark={dark} label={tr('Unable to load assigned complaints.', 'Imeshindwa kupakia malalamiko uliyopewa.')} isError />}
             {!assignedQuery.isLoading && !assignedQuery.isError && assignedQuery.data?.length === 0 && (
-              <StateBlock dark={dark} label="No assigned complaints right now." />
+              <StateBlock dark={dark} label={tr('No assigned complaints right now.', 'Kwa sasa hakuna malalamiko uliyopewa.')} />
             )}
 
             {!assignedQuery.isLoading && !assignedQuery.isError && assignedQuery.data?.map((complaint) => (
@@ -618,14 +642,14 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{complaint.title}</div>
                     <div style={{ fontSize: 13, color: textSub }}>
-                      Category: {complaint.category} | Status: {complaint.status}
+                      {tr('Category', 'Kategoria')}: {complaint.category} | {tr('Status', 'Hali')}: {complaint.status}
                     </div>
                     <div style={{ fontSize: 13, color: textSub }}>
-                      Location: {complaint.location} | Submitted: {formatDateTime(complaint.submitted_at)}
+                      {tr('Location', 'Mahali')}: {complaint.location} | {tr('Submitted', 'Imewasilishwa')}: {formatDateTime(complaint.submitted_at)}
                     </div>
                     {complaint.metadata?.type === 'letter' && (
                       <div style={{ marginTop: 4, fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
-                        Formal Letter
+                        {tr('Formal Letter', 'Barua Rasmi')}
                       </div>
                     )}
                   </div>
@@ -650,7 +674,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                 <div style={{ marginTop: 10 }}>
                   <textarea
                     rows={3}
-                    placeholder="Write your official response to the citizen..."
+                    placeholder={tr('Write your official response to the citizen...', 'Andika jibu lako rasmi kwa mwananchi...')}
                     value={responsesByComplaint[complaint.id] || ''}
                     onChange={(e) => setResponsesByComplaint((prev) => ({ ...prev, [complaint.id]: e.target.value }))}
                     style={{
@@ -693,7 +717,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                       fontWeight: 600,
                     }}
                   >
-                    Send Response
+                    {tr('Send Response', 'Tuma Jibu')}
                   </button>
 
                   <button
@@ -712,7 +736,7 @@ export function LeaderPortalPage({ dark, isMobile = false }) {
                       fontWeight: 600,
                     }}
                   >
-                    Send & Resolve
+                    {tr('Send & Resolve', 'Tuma na Funga')}
                   </button>
                 </div>
               </div>

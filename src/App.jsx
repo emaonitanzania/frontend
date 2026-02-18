@@ -13,17 +13,17 @@ export default function App() {
     <QueryClientProvider client={qc}>
       <BrowserRouter>
         <Layout>
-          {({ dark, isMobile }) => (
+          {({ dark, isMobile, language, tx }) => (
             <Routes>
               <Route path="/" element={<Navigate to="/chat" replace />} />
-              <Route path="/chat" element={<ChatPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/inbox" element={<InboxPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/unreplied" element={<UnrepliedPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/history" element={<HistoryPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/escalation" element={<EscalationPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/faqs" element={<FAQsPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/leader/register" element={<LeaderRegisterPage dark={dark} isMobile={isMobile} />} />
-              <Route path="/leader/portal" element={<LeaderPortalPage dark={dark} isMobile={isMobile} />} />
+              <Route path="/chat" element={<ChatPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/inbox" element={<InboxPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/unreplied" element={<UnrepliedPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/history" element={<HistoryPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/escalation" element={<EscalationPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/faqs" element={<FAQsPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/leader/register" element={<LeaderRegisterPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              <Route path="/leader/portal" element={<LeaderPortalPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
             </Routes>
           )}
         </Layout>
