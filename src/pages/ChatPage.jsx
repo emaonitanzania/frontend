@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatAPI, complaintsAPI } from '../services/api';
 
 const SESSION_KEY = 'emaoni_session';
@@ -34,19 +34,18 @@ const LOCATIONS = [
 export default function ChatPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
+  const createWelcomeMessage = () => ({
+    id: 'welcome_ai',
+    from: 'bot',
+    text: tr(
+      "Hello! I'm E-Maoni, your AI assistant. Share your issue and I will help you immediately.",
+      'Habari! Mimi ni E-Maoni, msaidizi wako wa AI. Eleza changamoto yako na nitakusaidia mara moja.'
+    ),
+    time: new Date(),
+  });
 
   const [mode, setMode] = useState('ai'); // 'ai' | 'barua'
-  const [aiMessages, setAiMessages] = useState([
-    {
-      id: 'welcome_ai',
-      from: 'bot',
-      text: tr(
-        "Hello! I'm E-Maoni, your AI assistant. Share your issue and I will help you immediately.",
-        'Habari! Mimi ni E-Maoni, msaidizi wako wa AI. Eleza changamoto yako na nitakusaidia mara moja.'
-      ),
-      time: new Date(),
-    },
-  ]);
+  const [aiMessages, setAiMessages] = useState([createWelcomeMessage()]);
   const [baruaNotice, setBaruaNotice] = useState('');
   const [baruaNoticeType, setBaruaNoticeType] = useState('success');
   const [input, setInput] = useState('');
@@ -57,7 +56,11 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const [senderPO, setSenderPO] = useState('');
   const [letterHead, setLetterHead] = useState('');
   const [letterBody, setLetterBody] = useState('');
+  const [leadersModalOpen, setLeadersModalOpen] = useState(false);
+  const [leadersQuery, setLeadersQuery] = useState('');
+  const [leadersResult, setLeadersResult] = useState(null);
   const bottomRef = useRef(null);
+  const historyHydratedRef = useRef(false);
 
   const leaderLabel = (() => {
     const item = LEADERS.find((entry) => entry.value === leader);
@@ -70,6 +73,34 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const baruaLeaders = LEADERS.filter((item) => item.value !== 'ai');
   const hasValidReceiver = receivers.some((r) => r.trim());
 
+  const conversationQuery = useQuery({
+    queryKey: ['ai', 'conversation', sessionId],
+    queryFn: () => chatAPI.getConversation(sessionId),
+    enabled: !!sessionId,
+    staleTime: 30000,
+  });
+
+  useEffect(() => {
+    if (historyHydratedRef.current || !conversationQuery.isSuccess) return;
+    const payload = conversationQuery.data;
+    const conversations = Array.isArray(payload) ? payload : (payload?.results || []);
+    const conversation = conversations.find((item) => item.session_id === sessionId) || conversations[0];
+    const storedMessages = Array.isArray(conversation?.messages) ? conversation.messages : [];
+
+    if (storedMessages.length > 0) {
+      const mapped = storedMessages.map((msg) => ({
+        id: `srv_${msg.id}`,
+        from: msg.sender === 'user' ? 'user' : 'bot',
+        text: msg.content || '',
+        time: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+      }));
+      setAiMessages(mapped);
+    } else {
+      setAiMessages([createWelcomeMessage()]);
+    }
+    historyHydratedRef.current = true;
+  }, [conversationQuery.data, conversationQuery.isSuccess, sessionId]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mode, aiMessages]);
@@ -77,6 +108,9 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const chatMutation = useMutation({
     mutationFn: (data) => chatAPI.sendMessage(data),
     onSuccess: (data) => {
+      if (data?.complaint_submitted) {
+        queryClient.invalidateQueries({ queryKey: ['complaints'] });
+      }
       setAiMessages((prev) => [
         ...prev,
         {
@@ -126,6 +160,22 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
     },
   });
 
+  const leadersMutation = useMutation({
+    mutationFn: (payload) => chatAPI.knowLeaders(payload),
+    onSuccess: (data) => {
+      setLeadersResult(data);
+    },
+    onError: () => {
+      setLeadersResult({
+        answer: tr(
+          'Unable to fetch leader information right now. Please try again.',
+          'Imeshindwa kupata taarifa za viongozi kwa sasa. Tafadhali jaribu tena.'
+        ),
+        sources: [],
+      });
+    },
+  });
+
   const isSendingMessage = chatMutation.isPending;
   const isSendingLetter = letterMutation.isPending;
   const isLetterSendDisabled =
@@ -149,6 +199,9 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       message: text,
       session_id: sessionId,
       include_knowledge_base: true,
+      target_leader: leader,
+      target_location: location,
+      auto_submit_new_complaint: true,
     });
 
     setInput('');
@@ -181,6 +234,27 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  const runLeaderLookup = () => {
+    const q = leadersQuery.trim();
+    if (!q || leadersMutation.isPending) return;
+    setLeadersResult(null);
+    leadersMutation.mutate({ query: q, max_results: 8 });
+  };
+
+  const leaderPromptSuggestions = [
+    tr('Current President of Tanzania', 'Rais wa sasa wa Tanzania'),
+    tr('Current Minister of Energy Tanzania', 'Waziri wa Nishati wa sasa Tanzania'),
+    tr("Current Prime Minister's office holder Tanzania", 'Waziri Mkuu wa sasa Tanzania'),
+    tr('Current Regional Commissioner of Dar es Salaam', 'Mkuu wa Mkoa wa Dar es Salaam wa sasa'),
+  ];
+
+  const isOfficialGovSource = (item) => {
+    if (!item) return false;
+    if (item.official) return true;
+    const link = String(item.url || '').toLowerCase();
+    return /\.gov\.go\.tz/.test(link) || /\.go\.tz/.test(link);
   };
 
   const border = dark ? '#334155' : '#e2e8f0';
@@ -381,85 +455,155 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: isMobile ? 'stretch' : 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: 10,
             marginBottom: 14,
-            borderRadius: 8,
-            overflow: 'hidden',
-            border: `1px solid ${border}`,
-            width: isMobile ? '100%' : 'fit-content',
           }}
         >
-          {['ai', 'barua'].map((m) => (
+          <div
+            style={{
+              display: 'flex',
+              borderRadius: 8,
+              overflow: 'hidden',
+              border: `1px solid ${border}`,
+              width: isMobile ? '100%' : 'fit-content',
+            }}
+          >
+            {['ai', 'barua'].map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                style={{
+                  padding: '9px 22px',
+                  background: mode === m ? '#2563eb' : sub,
+                  color: mode === m ? '#fff' : textSub,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  borderRight: m === 'ai' ? `1px solid ${border}` : 'none',
+                  transition: 'all 0.2s',
+                  flex: isMobile ? 1 : 'initial',
+                }}
+              >
+                {m === 'ai' ? tr('Ujumbe', 'Ujumbe') : 'Barua'}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'ai' && (
             <button
-              key={m}
-              onClick={() => setMode(m)}
+              onClick={() => setLeadersModalOpen(true)}
               style={{
-                padding: '9px 22px',
-                background: mode === m ? '#2563eb' : sub,
-                color: mode === m ? '#fff' : textSub,
-                border: 'none',
+                border: `1px solid ${border}`,
+                borderRadius: 8,
+                background: sub,
+                color: inputTxt,
+                padding: '9px 14px',
+                fontSize: 13,
+                fontWeight: 600,
                 cursor: 'pointer',
-                fontWeight: 500,
-                fontSize: 14,
-                borderRight: m === 'ai' ? `1px solid ${border}` : 'none',
-                transition: 'all 0.2s',
-                flex: isMobile ? 1 : 'initial',
+                width: isMobile ? '100%' : 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
-              {m === 'ai' ? 'AI' : 'Barua'}
+              <i className="fas fa-users" />
+              {tr('Know Your Leaders', 'Wajue Viongozi Wako')}
             </button>
-          ))}
+          )}
         </div>
 
         {mode === 'ai' && (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKey}
-              disabled={isSendingMessage}
-              placeholder={tr('Ask the AI assistant...', 'Muulize msaidizi wa AI...')}
-              rows={isMobile ? 3 : 2}
+          <div>
+            <div
               style={{
-                flex: 1,
-                padding: '13px 15px',
-                border: `1px solid ${border}`,
-                borderRadius: 10,
-                fontSize: 15,
-                resize: 'none',
-                background: inputBg,
-                color: inputTxt,
-                outline: 'none',
-                fontFamily: 'inherit',
-                transition: 'border-color 0.2s',
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = '#2563eb';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = border;
-              }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={isSendingMessage || !input.trim()}
-              style={{
-                width: isMobile ? 44 : 50,
-                height: isMobile ? 44 : 50,
-                borderRadius: 10,
-                background: isSendingMessage || !input.trim() ? '#94a3b8' : '#2563eb',
-                color: '#fff',
-                border: 'none',
-                cursor: isSendingMessage || !input.trim() ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 16,
-                transition: 'background 0.2s',
-                flexShrink: 0,
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                gap: 10,
+                marginBottom: 10,
               }}
             >
-              <i className="fas fa-paper-plane" />
-            </button>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                  {tr('Route to leader:', 'Elekeza kwa kiongozi:')}
+                </label>
+                <select value={leader} onChange={(e) => setLeader(e.target.value)} style={selectStyle}>
+                  {baruaLeaders.map((l) => (
+                    <option key={l.value} value={l.value}>
+                      {tr(l.label, l.labelSw)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                  {tr('Location:', 'Mahali:')}
+                </label>
+                <select value={location} onChange={(e) => setLocation(e.target.value)} style={selectStyle}>
+                  {LOCATIONS.map((l) => (
+                    <option key={l.value} value={l.value}>
+                      {tr(l.label, l.labelSw)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKey}
+                disabled={isSendingMessage}
+                placeholder={tr('Describe your complaint...', 'Eleza malalamiko yako...')}
+                rows={isMobile ? 3 : 2}
+                style={{
+                  flex: 1,
+                  padding: '13px 15px',
+                  border: `1px solid ${border}`,
+                  borderRadius: 10,
+                  fontSize: 15,
+                  resize: 'none',
+                  background: inputBg,
+                  color: inputTxt,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#2563eb';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = border;
+                }}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={isSendingMessage || !input.trim()}
+                style={{
+                  width: isMobile ? 44 : 50,
+                  height: isMobile ? 44 : 50,
+                  borderRadius: 10,
+                  background: isSendingMessage || !input.trim() ? '#94a3b8' : '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: isSendingMessage || !input.trim() ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                  transition: 'background 0.2s',
+                  flexShrink: 0,
+                }}
+              >
+                <i className="fas fa-paper-plane" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -652,10 +796,407 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
         )}
       </div>
 
+      {leadersModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.62)',
+            backdropFilter: 'blur(5px)',
+            zIndex: 80,
+            display: 'flex',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: 'center',
+            padding: isMobile ? 0 : 18,
+          }}
+        >
+          <div
+            style={{
+              width: isMobile ? '100%' : 'min(900px, 96vw)',
+              maxHeight: isMobile ? '100%' : '86vh',
+              background: surface,
+              border: dark ? '1px solid #1f2937' : '1px solid #dbeafe',
+              borderRadius: isMobile ? 0 : 12,
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: dark
+                ? '0 22px 44px rgba(2,6,23,0.55)'
+                : '0 22px 44px rgba(37,99,235,0.15)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: isMobile ? '14px 12px' : '18px 20px',
+                borderBottom: dark ? '1px solid #1f2937' : '1px solid #dbeafe',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                background: dark
+                  ? 'linear-gradient(135deg, #0f172a 0%, #172554 100%)'
+                  : 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: dark ? '#1e293b' : '#fff',
+                    border: dark ? '1px solid #334155' : '1px solid #bfdbfe',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2563eb',
+                    flexShrink: 0,
+                  }}
+                >
+                  <i className="fas fa-landmark" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: inputTxt }}>
+                    {tr('Know Your Leaders', 'Wajue Viongozi Wako')}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: textSub }}>
+                    {tr(
+                      'Tanzania-first search with official public government sources.',
+                      'Utafutaji wa Tanzania-first wenye vyanzo rasmi vya serikali.'
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setLeadersModalOpen(false)}
+                style={{
+                  border: `1px solid ${border}`,
+                  background: sub,
+                  color: inputTxt,
+                  borderRadius: 8,
+                  width: 34,
+                  height: 34,
+                  cursor: 'pointer',
+                }}
+                aria-label={tr('Close', 'Funga')}
+              >
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            <div style={{ padding: isMobile ? 12 : 20, overflowY: 'auto' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: dark ? '#1e3a8a' : '#dbeafe',
+                    color: dark ? '#dbeafe' : '#1d4ed8',
+                    border: dark ? '1px solid #1d4ed8' : '1px solid #93c5fd',
+                  }}
+                >
+                  {tr('Tanzania-First', 'Tanzania-First')}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: dark ? '#052e16' : '#dcfce7',
+                    color: dark ? '#bbf7d0' : '#166534',
+                    border: dark ? '1px solid #166534' : '1px solid #86efac',
+                  }}
+                >
+                  {tr('Official Sources Priority', 'Vyanzo Rasmi Kwanza')}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: dark ? '#3f2a00' : '#fef3c7',
+                    color: dark ? '#fde68a' : '#92400e',
+                    border: dark ? '1px solid #92400e' : '1px solid #fcd34d',
+                  }}
+                >
+                  {tr('Current Data Default', 'Data za Sasa kwa Msingi')}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  flexDirection: isMobile ? 'column' : 'row',
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <i
+                    className="fas fa-search"
+                    style={{
+                      position: 'absolute',
+                      left: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: textSub,
+                      fontSize: 12,
+                    }}
+                  />
+                  <input
+                    value={leadersQuery}
+                    onChange={(e) => setLeadersQuery(e.target.value)}
+                    placeholder={tr(
+                      'e.g. Current Minister of Energy in Tanzania',
+                      'mf. Waziri wa Nishati wa sasa Tanzania'
+                    )}
+                    style={{
+                      ...inputStyle,
+                      borderRadius: 10,
+                      paddingLeft: 33,
+                      minHeight: 42,
+                      border: dark ? '1px solid #334155' : '1px solid #bfdbfe',
+                      background: dark ? '#0f172a' : '#fff',
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        runLeaderLookup();
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={runLeaderLookup}
+                  disabled={leadersMutation.isPending || !leadersQuery.trim()}
+                  style={{
+                    border: 'none',
+                    borderRadius: 10,
+                    background:
+                      leadersMutation.isPending || !leadersQuery.trim()
+                        ? '#94a3b8'
+                        : 'linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%)',
+                    color: '#fff',
+                    padding: isMobile ? '11px 14px' : '0 18px',
+                    minHeight: 42,
+                    cursor: leadersMutation.isPending || !leadersQuery.trim() ? 'not-allowed' : 'pointer',
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    letterSpacing: 0.2,
+                    minWidth: isMobile ? '100%' : 150,
+                    boxShadow: leadersMutation.isPending || !leadersQuery.trim()
+                      ? 'none'
+                      : '0 8px 18px rgba(37,99,235,0.28)',
+                  }}
+                >
+                  {leadersMutation.isPending ? tr('Searching...', 'Inatafuta...') : tr('Deep Search', 'Tafuta kwa Kina')}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginBottom: 14,
+                }}
+              >
+                {leaderPromptSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => {
+                      setLeadersQuery(suggestion);
+                      setLeadersResult(null);
+                    }}
+                    style={{
+                      border: dark ? '1px solid #334155' : '1px solid #dbeafe',
+                      borderRadius: 999,
+                      background: dark ? '#111827' : '#f8fafc',
+                      color: inputTxt,
+                      fontSize: 12.5,
+                      padding: '7px 11px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+
+              {leadersMutation.isPending && (
+                <div
+                  style={{
+                    border: dark ? '1px solid #334155' : '1px solid #dbeafe',
+                    borderRadius: 10,
+                    background: dark ? '#0f172a' : '#f8fafc',
+                    padding: '12px 14px',
+                    color: textSub,
+                    fontSize: 14,
+                    marginBottom: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: '50%',
+                      background: '#2563eb',
+                      animation: 'pulse 1.2s infinite',
+                    }}
+                  />
+                  {tr(
+                    'Collecting latest data from official Tanzania government public websites and trusted web sources...',
+                    'Inakusanya data mpya kutoka tovuti rasmi za serikali ya Tanzania na vyanzo vingine salama...'
+                  )}
+                </div>
+              )}
+
+              {leadersResult?.answer && (
+                <div
+                  style={{
+                    border: dark ? '1px solid #334155' : '1px solid #dbeafe',
+                    borderRadius: 10,
+                    background: dark ? '#0f172a' : '#f8fafc',
+                    padding: isMobile ? 12 : 14,
+                    color: inputTxt,
+                    fontSize: 14,
+                    lineHeight: 1.65,
+                    whiteSpace: 'pre-wrap',
+                    marginBottom: 12,
+                  }}
+                >
+                  {leadersResult.as_of_date && (
+                    <div style={{ marginBottom: 8, fontSize: 12, color: textSub, fontWeight: 600 }}>
+                      {tr('As of', 'Hadi tarehe')}: {leadersResult.as_of_date}
+                    </div>
+                  )}
+                  {leadersResult.prefer_current && (
+                    <div style={{ marginBottom: 10, fontSize: 12, color: textSub }}>
+                      {tr(
+                        'This answer prioritizes current information from official Tanzania public sites where available.',
+                        'Jibu hili limeweka kipaumbele taarifa za sasa kutoka vyanzo rasmi vya umma vya Tanzania pale vinapopatikana.'
+                      )}
+                    </div>
+                  )}
+                  {leadersResult.answer}
+                </div>
+              )}
+
+              {!!leadersResult?.sources?.length && (
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: textSub, marginBottom: 8 }}>
+                    {tr('Sources', 'Vyanzo')}
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                      gap: 8,
+                    }}
+                  >
+                    {leadersResult.sources.map((item, idx) => (
+                      <a
+                        key={`${item.url}_${idx}`}
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          border: dark ? '1px solid #334155' : '1px solid #dbeafe',
+                          borderRadius: 8,
+                          padding: '10px 12px',
+                          textDecoration: 'none',
+                          color: inputTxt,
+                          background: dark ? '#111827' : '#ffffff',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 6,
+                          transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                        }}
+                      >
+                        <div style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35 }}>{item.title || item.url}</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              borderRadius: 999,
+                              padding: '3px 8px',
+                              background: isOfficialGovSource(item)
+                                ? (dark ? '#052e16' : '#dcfce7')
+                                : (dark ? '#1e293b' : '#e2e8f0'),
+                              color: isOfficialGovSource(item)
+                                ? (dark ? '#bbf7d0' : '#166534')
+                                : textSub,
+                              border: isOfficialGovSource(item)
+                                ? (dark ? '1px solid #166534' : '1px solid #86efac')
+                                : `1px solid ${border}`,
+                            }}
+                          >
+                            {isOfficialGovSource(item)
+                              ? tr('Official Tanzania Source', 'Chanzo Rasmi Tanzania')
+                              : tr('Web Source', 'Chanzo cha Mtandao')}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              borderRadius: 999,
+                              padding: '3px 8px',
+                              background: dark ? '#0f172a' : '#f8fafc',
+                              color: textSub,
+                              border: `1px solid ${border}`,
+                            }}
+                          >
+                            {item.source_timestamp || tr('date unavailable', 'tarehe haipo')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: textSub, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.domain || item.source || 'web'}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {leadersResult && !leadersResult.answer && !leadersMutation.isPending && (
+                <div style={{ fontSize: 13, color: textSub }}>
+                  {tr(
+                    'No response available yet. Try a more specific title, office, or region in Tanzania.',
+                    'Hakuna majibu bado. Jaribu kuweka cheo/ofisi/mkoa mahususi wa Tanzania.'
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes bounce {
           0%, 80%, 100% { transform: translateY(0); }
           40% { transform: translateY(-6px); }
+        }
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 0.45; }
+          50% { transform: scale(1.3); opacity: 1; }
+          100% { transform: scale(1); opacity: 0.45; }
         }
       `}</style>
     </>

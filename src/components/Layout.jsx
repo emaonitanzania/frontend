@@ -151,6 +151,17 @@ export default function Layout({ children }) {
             >
               co-founded by swalehe
             </span>
+            <span
+              style={{
+                marginTop: 2,
+                fontSize: 11,
+                fontWeight: 600,
+                color: dark ? '#94a3b8' : '#64748b',
+                letterSpacing: 0.2,
+              }}
+            >
+              developed by shaibu mzogo
+            </span>
           </div>
           {isMobile && (
             <button

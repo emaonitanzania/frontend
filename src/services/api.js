@@ -86,6 +86,10 @@ export const chatAPI = {
     const res = await api.post('/ai/chat/', data);
     return res.data;
   },
+  knowLeaders: async (data) => {
+    const res = await api.post('/ai/leaders/know/', data);
+    return res.data;
+  },
   getConversation: async (sessionId) => {
     const res = await api.get('/ai/conversations/', withSession(sessionId));
     return res.data;
