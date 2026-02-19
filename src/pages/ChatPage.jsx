@@ -318,29 +318,31 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
     outline: 'none',
   };
 
-  const sectionPaddingX = isMobile ? '14px' : '30px';
-  const messageWrapWidth = isMobile ? '90%' : '78%';
-  const avatarSize = isMobile ? 30 : 36;
+  const sectionPaddingX = isMobile ? '8px' : '30px';
+  const messageWrapWidth = isMobile ? '95%' : '78%';
+  const avatarSize = isMobile ? 24 : 36;
 
   return (
     <>
       {/* Page Header */}
       <div
         style={{
-          padding: isMobile ? `10px ${sectionPaddingX}` : `18px ${sectionPaddingX}`,
+          padding: isMobile ? `7px ${sectionPaddingX}` : `18px ${sectionPaddingX}`,
           background: surface,
           borderBottom: `1px solid ${border}`,
           boxShadow: '0 2px 5px rgba(0,0,0,0.04)',
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: isMobile ? 18 : 22, marginBottom: isMobile ? 1 : 3 }}>
+        <div style={{ fontWeight: 600, fontSize: isMobile ? 16 : 22, marginBottom: isMobile ? 0 : 3 }}>
           {tr('Chats', 'Mazungumzo')}
         </div>
-        <div style={{ fontSize: isMobile ? 12 : 14, color: textSub }}>
-          {mode === 'ai'
-            ? tr('AI support conversation', 'Mazungumzo ya msaada wa AI')
-            : tr('Barua formal letter portal', 'Tovuti ya barua rasmi')}
-        </div>
+        {!isMobile && (
+          <div style={{ fontSize: 14, color: textSub }}>
+            {mode === 'ai'
+              ? tr('AI support conversation', 'Mazungumzo ya msaada wa AI')
+              : tr('Barua formal letter portal', 'Tovuti ya barua rasmi')}
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -349,7 +351,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: isMobile ? '10px 9px' : `24px ${sectionPaddingX}`,
+            padding: isMobile ? '6px 6px' : `24px ${sectionPaddingX}`,
             display: 'flex',
             flexDirection: 'column',
             gap: 4,
@@ -363,7 +365,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 flexDirection: m.from === 'user' ? 'row-reverse' : 'row',
                 alignSelf: m.from === 'user' ? 'flex-end' : 'flex-start',
                 maxWidth: messageWrapWidth,
-                marginBottom: 14,
+                marginBottom: isMobile ? 9 : 14,
                 alignItems: 'flex-end',
                 gap: 0,
               }}
@@ -376,9 +378,9 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: isMobile ? 13 : 15,
+                  fontSize: isMobile ? 11 : 15,
                   flexShrink: 0,
-                  margin: m.from === 'user' ? '0 0 0 8px' : '0 8px 0 0',
+                  margin: m.from === 'user' ? (isMobile ? '0 0 0 5px' : '0 0 0 8px') : (isMobile ? '0 5px 0 0' : '0 8px 0 0'),
                   background: m.from === 'user' ? '#2563eb' : (dark ? '#334155' : '#e2e8f0'),
                   color: m.from === 'user' ? '#fff' : (dark ? '#f1f5f9' : '#64748b'),
                 }}
@@ -388,15 +390,15 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
 
               <div
                 style={{
-                  padding: isMobile ? '11px 14px' : '13px 17px',
-                  borderRadius: 18,
+                  padding: isMobile ? '8px 10px' : '13px 17px',
+                  borderRadius: isMobile ? 14 : 18,
                   borderBottomRightRadius: m.from === 'user' ? 4 : 18,
                   borderBottomLeftRadius: m.from === 'bot' ? 4 : 18,
                   background: m.from === 'user' ? '#2563eb' : surface,
                   color: m.from === 'user' ? '#fff' : (dark ? '#f1f5f9' : '#1e293b'),
                   boxShadow: '0 2px 6px rgba(0,0,0,0.07)',
-                  fontSize: isMobile ? 13.8 : 14.5,
-                  lineHeight: 1.6,
+                  fontSize: isMobile ? 12.8 : 14.5,
+                  lineHeight: isMobile ? 1.45 : 1.6,
                   whiteSpace: 'pre-wrap',
                   border: m.from === 'bot' ? `1px solid ${border}` : 'none',
                 }}
@@ -404,8 +406,8 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 {m.text}
                 <div
                   style={{
-                    fontSize: 11,
-                    marginTop: 5,
+                    fontSize: isMobile ? 10 : 11,
+                    marginTop: isMobile ? 3 : 5,
                     opacity: 0.65,
                     textAlign: m.from === 'user' ? 'right' : 'left',
                   }}
@@ -417,7 +419,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
           ))}
 
           {isSendingMessage && (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0, marginBottom: isMobile ? 10 : 16 }}>
               <div
                 style={{
                   width: avatarSize,
@@ -426,8 +428,8 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: isMobile ? 13 : 15,
-                  marginRight: 8,
+                  fontSize: isMobile ? 11 : 15,
+                  marginRight: isMobile ? 5 : 8,
                   background: dark ? '#334155' : '#e2e8f0',
                   color: dark ? '#f1f5f9' : '#64748b',
                   flexShrink: 0,
@@ -437,14 +439,14 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
               </div>
               <div
                 style={{
-                  padding: '11px 15px',
-                  borderRadius: 18,
+                  padding: isMobile ? '8px 10px' : '11px 15px',
+                  borderRadius: isMobile ? 14 : 18,
                   borderBottomLeftRadius: 4,
                   background: surface,
                   border: `1px solid ${border}`,
                   boxShadow: '0 2px 6px rgba(0,0,0,0.07)',
                   display: 'flex',
-                  gap: 5,
+                  gap: isMobile ? 4 : 5,
                   alignItems: 'center',
                 }}
               >
@@ -472,7 +474,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       {/* Input Area */}
       <div
         style={{
-          padding: isMobile ? '10px 9px' : '18px 28px',
+          padding: isMobile ? '7px 6px' : '18px 28px',
           background: surface,
           borderTop: `1px solid ${border}`,
           ...(mode === 'barua'
@@ -480,7 +482,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 flex: 1,
                 minHeight: 0,
                 overflowY: 'auto',
-                padding: isMobile ? '10px 9px' : `18px ${sectionPaddingX}`,
+                padding: isMobile ? '7px 6px' : `18px ${sectionPaddingX}`,
               }
             : {}),
         }}
@@ -489,10 +491,10 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: isMobile ? 'stretch' : 'center',
-            flexDirection: isMobile ? 'column' : 'row',
-            gap: 10,
-            marginBottom: isMobile ? 8 : 14,
+            alignItems: 'center',
+            flexDirection: 'row',
+            gap: isMobile ? 6 : 10,
+            marginBottom: isMobile ? 6 : 14,
           }}
         >
           <div
@@ -501,7 +503,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
               borderRadius: 8,
               overflow: 'hidden',
               border: `1px solid ${border}`,
-              width: isMobile ? '100%' : 'fit-content',
+              width: isMobile ? 'auto' : 'fit-content',
             }}
           >
             {['ai', 'barua'].map((m) => (
@@ -509,16 +511,16 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 key={m}
                 onClick={() => setMode(m)}
                 style={{
-                  padding: '9px 22px',
+                  padding: isMobile ? '5px 11px' : '9px 22px',
                   background: mode === m ? '#2563eb' : sub,
                   color: mode === m ? '#fff' : textSub,
                   border: 'none',
                   cursor: 'pointer',
                   fontWeight: 500,
-                  fontSize: 14,
+                  fontSize: isMobile ? 12 : 14,
                   borderRight: m === 'ai' ? `1px solid ${border}` : 'none',
                   transition: 'all 0.2s',
-                  flex: isMobile ? 1 : 'initial',
+                  flex: 'initial',
                 }}
               >
                 {m === 'ai' ? tr('Ujumbe', 'Ujumbe') : 'Barua'}
@@ -534,19 +536,21 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 borderRadius: 8,
                 background: sub,
                 color: inputTxt,
-                padding: '9px 14px',
-                fontSize: 13,
+                padding: isMobile ? '0 8px' : '9px 14px',
+                fontSize: isMobile ? 11.5 : 13,
                 fontWeight: 600,
                 cursor: 'pointer',
-                width: isMobile ? '100%' : 'auto',
+                width: 'auto',
+                height: isMobile ? 32 : 'auto',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 8,
+                gap: 6,
               }}
+              aria-label={tr('Know Your Leaders', 'Wajue Viongozi Wako')}
             >
               <i className="fas fa-users" />
-              {tr('Know Your Leaders', 'Wajue Viongozi Wako')}
+              {isMobile ? tr('Leaders', 'Viongozi') : tr('Know Your Leaders', 'Wajue Viongozi Wako')}
             </button>
           )}
         </div>
@@ -556,10 +560,10 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
             {isMobile && (
               <div
                 style={{
-                  marginBottom: 8,
+                  marginBottom: 6,
                   border: `1px solid ${border}`,
                   borderRadius: 8,
-                  padding: '7px 9px',
+                  padding: '5px 7px',
                   background: sub,
                 }}
               >
@@ -573,7 +577,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer',
                     padding: 0,
@@ -582,7 +586,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   <span>{tr('Routing options', 'Mipangilio ya uelekezaji')}</span>
                   <i className={`fas ${showAiRoutingOptions ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
                 </button>
-                <div style={{ marginTop: 4, fontSize: 11.5, color: textSub }}>
+                <div style={{ marginTop: 2, fontSize: 10.8, color: textSub }}>
                   {leaderLabel} • {locationLabel}
                 </div>
               </div>
@@ -634,10 +638,10 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 rows={isMobile ? 2 : 2}
                 style={{
                   flex: 1,
-                  padding: isMobile ? '11px 12px' : '13px 15px',
+                  padding: isMobile ? '8px 10px' : '13px 15px',
                   border: `1px solid ${border}`,
-                  borderRadius: 10,
-                  fontSize: isMobile ? 14 : 15,
+                  borderRadius: isMobile ? 8 : 10,
+                  fontSize: isMobile ? 13 : 15,
                   resize: 'none',
                   background: inputBg,
                   color: inputTxt,
@@ -656,9 +660,9 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 onClick={sendMessage}
                 disabled={isSendingMessage || !input.trim()}
                 style={{
-                  width: isMobile ? 44 : 50,
-                  height: isMobile ? 44 : 50,
-                  borderRadius: 10,
+                  width: isMobile ? 34 : 50,
+                  height: isMobile ? 34 : 50,
+                  borderRadius: isMobile ? 8 : 10,
                   background: isSendingMessage || !input.trim() ? '#94a3b8' : '#2563eb',
                   color: '#fff',
                   border: 'none',
@@ -666,7 +670,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 16,
+                  fontSize: isMobile ? 12 : 16,
                   transition: 'background 0.2s',
                   flexShrink: 0,
                 }}
@@ -1076,13 +1080,13 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                         ? '#94a3b8'
                         : 'linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%)',
                     color: '#fff',
-                    padding: isMobile ? '11px 14px' : '0 18px',
-                    minHeight: 42,
+                    padding: isMobile ? '8px 10px' : '0 18px',
+                    minHeight: isMobile ? 34 : 42,
                     cursor: leadersMutation.isPending || !leadersQuery.trim() ? 'not-allowed' : 'pointer',
-                    fontSize: 13.5,
+                    fontSize: isMobile ? 12 : 13.5,
                     fontWeight: 700,
                     letterSpacing: 0.2,
-                    minWidth: isMobile ? '100%' : 150,
+                    minWidth: isMobile ? 94 : 150,
                     boxShadow: leadersMutation.isPending || !leadersQuery.trim()
                       ? 'none'
                       : '0 8px 18px rgba(37,99,235,0.28)',
