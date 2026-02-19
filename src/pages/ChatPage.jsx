@@ -59,6 +59,9 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const [leadersModalOpen, setLeadersModalOpen] = useState(false);
   const [leadersQuery, setLeadersQuery] = useState('');
   const [leadersResult, setLeadersResult] = useState(null);
+  const [showAiRoutingOptions, setShowAiRoutingOptions] = useState(!isMobile);
+  const [searchingSourceCount, setSearchingSourceCount] = useState(0);
+  const [searchingSourceTarget, setSearchingSourceTarget] = useState(0);
   const bottomRef = useRef(null);
   const historyHydratedRef = useRef(false);
 
@@ -104,6 +107,12 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mode, aiMessages]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setShowAiRoutingOptions(true);
+    }
+  }, [isMobile]);
 
   const chatMutation = useMutation({
     mutationFn: (data) => chatAPI.sendMessage(data),
@@ -175,6 +184,21 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       });
     },
   });
+
+  useEffect(() => {
+    if (!leadersMutation.isPending) return undefined;
+    const tokenCount = leadersQuery.trim().split(/\s+/).filter(Boolean).length;
+    const estimated = Math.max(10, Math.min(42, tokenCount * 3 + 11));
+    setSearchingSourceTarget(estimated);
+    setSearchingSourceCount(0);
+    const timer = setInterval(() => {
+      setSearchingSourceCount((prev) => {
+        if (prev >= estimated) return estimated;
+        return prev + 1;
+      });
+    }, 90);
+    return () => clearInterval(timer);
+  }, [leadersMutation.isPending, leadersQuery]);
 
   const isSendingMessage = chatMutation.isPending;
   const isSendingLetter = letterMutation.isPending;
@@ -257,6 +281,13 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
     return /\.gov\.go\.tz/.test(link) || /\.go\.tz/.test(link);
   };
 
+  const resultSearchStats = leadersResult?.search_stats || null;
+  const searchedSourceCount = resultSearchStats?.sources_found ?? (leadersResult?.sources?.length || 0);
+  const searchedSourcePool = resultSearchStats?.target_source_pool ?? searchingSourceTarget;
+  const liveSearchProgress = searchingSourceTarget
+    ? Math.min(100, Math.round((searchingSourceCount / searchingSourceTarget) * 100))
+    : 0;
+
   const border = dark ? '#334155' : '#e2e8f0';
   const surface = dark ? '#1e293b' : '#ffffff';
   const sub = dark ? '#334155' : '#f8fafc';
@@ -296,14 +327,16 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       {/* Page Header */}
       <div
         style={{
-          padding: isMobile ? `14px ${sectionPaddingX}` : `18px ${sectionPaddingX}`,
+          padding: isMobile ? `10px ${sectionPaddingX}` : `18px ${sectionPaddingX}`,
           background: surface,
           borderBottom: `1px solid ${border}`,
           boxShadow: '0 2px 5px rgba(0,0,0,0.04)',
         }}
       >
-        <div style={{ fontWeight: 600, fontSize: isMobile ? 20 : 22, marginBottom: 3 }}>{tr('Chats', 'Mazungumzo')}</div>
-        <div style={{ fontSize: isMobile ? 13 : 14, color: textSub }}>
+        <div style={{ fontWeight: 600, fontSize: isMobile ? 18 : 22, marginBottom: isMobile ? 1 : 3 }}>
+          {tr('Chats', 'Mazungumzo')}
+        </div>
+        <div style={{ fontSize: isMobile ? 12 : 14, color: textSub }}>
           {mode === 'ai'
             ? tr('AI support conversation', 'Mazungumzo ya msaada wa AI')
             : tr('Barua formal letter portal', 'Tovuti ya barua rasmi')}
@@ -316,7 +349,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: isMobile ? '14px 12px' : `24px ${sectionPaddingX}`,
+            padding: isMobile ? '10px 9px' : `24px ${sectionPaddingX}`,
             display: 'flex',
             flexDirection: 'column',
             gap: 4,
@@ -439,7 +472,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       {/* Input Area */}
       <div
         style={{
-          padding: isMobile ? '14px 12px' : '18px 28px',
+          padding: isMobile ? '10px 9px' : '18px 28px',
           background: surface,
           borderTop: `1px solid ${border}`,
           ...(mode === 'barua'
@@ -447,7 +480,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 flex: 1,
                 minHeight: 0,
                 overflowY: 'auto',
-                padding: isMobile ? '14px 12px' : `18px ${sectionPaddingX}`,
+                padding: isMobile ? '10px 9px' : `18px ${sectionPaddingX}`,
               }
             : {}),
         }}
@@ -459,7 +492,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
             alignItems: isMobile ? 'stretch' : 'center',
             flexDirection: isMobile ? 'column' : 'row',
             gap: 10,
-            marginBottom: 14,
+            marginBottom: isMobile ? 8 : 14,
           }}
         >
           <div
@@ -520,39 +553,76 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
 
         {mode === 'ai' && (
           <div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-                gap: 10,
-                marginBottom: 10,
-              }}
-            >
-              <div>
-                <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                  {tr('Route to leader:', 'Elekeza kwa kiongozi:')}
-                </label>
-                <select value={leader} onChange={(e) => setLeader(e.target.value)} style={selectStyle}>
-                  {baruaLeaders.map((l) => (
-                    <option key={l.value} value={l.value}>
-                      {tr(l.label, l.labelSw)}
-                    </option>
-                  ))}
-                </select>
+            {isMobile && (
+              <div
+                style={{
+                  marginBottom: 8,
+                  border: `1px solid ${border}`,
+                  borderRadius: 8,
+                  padding: '7px 9px',
+                  background: sub,
+                }}
+              >
+                <button
+                  onClick={() => setShowAiRoutingOptions((prev) => !prev)}
+                  style={{
+                    width: '100%',
+                    border: 'none',
+                    background: 'transparent',
+                    color: inputTxt,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  <span>{tr('Routing options', 'Mipangilio ya uelekezaji')}</span>
+                  <i className={`fas ${showAiRoutingOptions ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
+                </button>
+                <div style={{ marginTop: 4, fontSize: 11.5, color: textSub }}>
+                  {leaderLabel} • {locationLabel}
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
-                  {tr('Location:', 'Mahali:')}
-                </label>
-                <select value={location} onChange={(e) => setLocation(e.target.value)} style={selectStyle}>
-                  {LOCATIONS.map((l) => (
-                    <option key={l.value} value={l.value}>
-                      {tr(l.label, l.labelSw)}
-                    </option>
-                  ))}
-                </select>
+            )}
+
+            {(!isMobile || showAiRoutingOptions) && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                  gap: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                    {tr('Route to leader:', 'Elekeza kwa kiongozi:')}
+                  </label>
+                  <select value={leader} onChange={(e) => setLeader(e.target.value)} style={selectStyle}>
+                    {baruaLeaders.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        {tr(l.label, l.labelSw)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                    {tr('Location:', 'Mahali:')}
+                  </label>
+                  <select value={location} onChange={(e) => setLocation(e.target.value)} style={selectStyle}>
+                    {LOCATIONS.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        {tr(l.label, l.labelSw)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <textarea
@@ -561,13 +631,13 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 onKeyDown={onKey}
                 disabled={isSendingMessage}
                 placeholder={tr('Describe your complaint...', 'Eleza malalamiko yako...')}
-                rows={isMobile ? 3 : 2}
+                rows={isMobile ? 2 : 2}
                 style={{
                   flex: 1,
-                  padding: '13px 15px',
+                  padding: isMobile ? '11px 12px' : '13px 15px',
                   border: `1px solid ${border}`,
                   borderRadius: 10,
-                  fontSize: 15,
+                  fontSize: isMobile ? 14 : 15,
                   resize: 'none',
                   background: inputBg,
                   color: inputTxt,
@@ -861,8 +931,8 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   </div>
                   <div style={{ fontSize: 12.5, color: textSub }}>
                     {tr(
-                      'Tanzania-first search with official public government sources.',
-                      'Utafutaji wa Tanzania-first wenye vyanzo rasmi vya serikali.'
+                      'Current-date search across any available sources, with Wikipedia listed first.',
+                      'Utafutaji wa tarehe ya sasa kwenye vyanzo vyote vinavyopatikana, ukiweka Wikipedia kwanza.'
                     )}
                   </div>
                 </div>
@@ -917,7 +987,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                     border: dark ? '1px solid #166534' : '1px solid #86efac',
                   }}
                 >
-                  {tr('Official Sources Priority', 'Vyanzo Rasmi Kwanza')}
+                  {tr('Wikipedia First Mention', 'Wikipedia Imetajwa Kwanza')}
                 </span>
                 <span
                   style={{
@@ -931,6 +1001,20 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   }}
                 >
                   {tr('Current Data Default', 'Data za Sasa kwa Msingi')}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    background: dark ? '#111827' : '#f1f5f9',
+                    color: textSub,
+                    border: `1px solid ${border}`,
+                  }}
+                >
+                  {tr('Sources', 'Vyanzo')}: {leadersMutation.isPending ? searchingSourceCount : searchedSourceCount}
+                  {searchedSourcePool ? ` / ${searchedSourcePool}` : ''}
                 </span>
               </div>
 
@@ -1047,23 +1131,52 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                     fontSize: 14,
                     marginBottom: 12,
                     display: 'flex',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     gap: 10,
+                    flexDirection: 'column',
                   }}
                 >
-                  <span
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: '50%',
-                      background: '#2563eb',
-                      animation: 'pulse 1.2s infinite',
-                    }}
-                  />
-                  {tr(
-                    'Collecting latest data from official Tanzania government public websites and trusted web sources...',
-                    'Inakusanya data mpya kutoka tovuti rasmi za serikali ya Tanzania na vyanzo vingine salama...'
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: '#2563eb',
+                        animation: 'pulse 1.2s infinite',
+                      }}
+                    />
+                    <span>
+                      {tr(
+                        'Collecting latest data for today from Wikipedia, government sites, and trusted web sources...',
+                        'Inakusanya data za leo kutoka Wikipedia, tovuti za serikali, na vyanzo vingine salama...'
+                      )}
+                    </span>
+                  </div>
+                  <div style={{ width: '100%' }}>
+                    <div style={{ fontSize: 12, color: textSub, marginBottom: 6 }}>
+                      {tr('Sources scanned', 'Vyanzo vinavyopitiwa')}: {searchingSourceCount}
+                      {searchingSourceTarget ? ` / ${searchingSourceTarget}` : ''}
+                    </div>
+                    <div
+                      style={{
+                        width: '100%',
+                        height: 8,
+                        borderRadius: 999,
+                        background: dark ? '#1f2937' : '#e2e8f0',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${liveSearchProgress}%`,
+                          background: 'linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%)',
+                          transition: 'width 0.14s linear',
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1089,8 +1202,8 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   {leadersResult.prefer_current && (
                     <div style={{ marginBottom: 10, fontSize: 12, color: textSub }}>
                       {tr(
-                        'This answer prioritizes current information from official Tanzania public sites where available.',
-                        'Jibu hili limeweka kipaumbele taarifa za sasa kutoka vyanzo rasmi vya umma vya Tanzania pale vinapopatikana.'
+                        'This answer prioritizes current information as of today and lists Wikipedia first when available.',
+                        'Jibu hili linaweka kipaumbele taarifa za sasa za leo na kutaja Wikipedia kwanza pale inapopatikana.'
                       )}
                     </div>
                   )}
@@ -1100,6 +1213,23 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
 
               {!!leadersResult?.sources?.length && (
                 <div>
+                  {resultSearchStats && (
+                    <div
+                      style={{
+                        marginBottom: 10,
+                        border: dark ? '1px solid #334155' : '1px solid #dbeafe',
+                        borderRadius: 8,
+                        background: dark ? '#0f172a' : '#f8fafc',
+                        padding: '8px 10px',
+                        fontSize: 12.5,
+                        color: textSub,
+                      }}
+                    >
+                      {tr('Searched', 'Imepitia')} {resultSearchStats.target_source_pool || searchedSourcePool}{' '}
+                      {tr('source targets and returned', 'vyanzo lengwa na kurudisha')}{' '}
+                      {resultSearchStats.sources_found || searchedSourceCount}.
+                    </div>
+                  )}
                   <div style={{ fontSize: 13, fontWeight: 700, color: textSub, marginBottom: 8 }}>
                     {tr('Sources', 'Vyanzo')}
                   </div>
