@@ -913,6 +913,10 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   style={{
                     width: 38,
                     height: 38,
+                    minWidth: 38,
+                    minHeight: 38,
+                    aspectRatio: '1 / 1',
+                    flex: '0 0 38px',
                     borderRadius: 10,
                     background: dark ? '#1e293b' : '#fff',
                     border: dark ? '1px solid #334155' : '1px solid #bfdbfe',
@@ -1141,6 +1145,11 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                       style={{
                         width: 9,
                         height: 9,
+                        minWidth: 9,
+                        minHeight: 9,
+                        aspectRatio: '1 / 1',
+                        flex: '0 0 9px',
+                        display: 'inline-block',
                         borderRadius: '50%',
                         background: '#2563eb',
                         animation: 'pulse 1.2s infinite',
