@@ -31,6 +31,9 @@ const LOCATIONS = [
   { value: 'national', label: 'National Level', labelSw: 'Ngazi ya Taifa' },
 ];
 
+const MAX_IMAGE_ATTACHMENTS = 4;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 export default function ChatPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
@@ -62,7 +65,12 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const [showAiRoutingOptions, setShowAiRoutingOptions] = useState(!isMobile);
   const [searchingSourceCount, setSearchingSourceCount] = useState(0);
   const [searchingSourceTarget, setSearchingSourceTarget] = useState(0);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [uploadNotice, setUploadNotice] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(null);
   const bottomRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const selectedImagesRef = useRef([]);
   const historyHydratedRef = useRef(false);
 
   const leaderLabel = (() => {
@@ -114,11 +122,30 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
     }
   }, [isMobile]);
 
+  useEffect(() => {
+    selectedImagesRef.current = selectedImages;
+  }, [selectedImages]);
+
+  useEffect(() => () => {
+    selectedImagesRef.current.forEach((item) => {
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+  }, []);
+
   const chatMutation = useMutation({
-    mutationFn: (data) => chatAPI.sendMessage(data),
-    onSuccess: (data) => {
+    mutationFn: ({ payload, onUploadProgress }) => chatAPI.sendMessage(payload, { onUploadProgress }),
+    onSuccess: (data, variables) => {
       if (data?.complaint_submitted) {
         queryClient.invalidateQueries({ queryKey: ['complaints'] });
+      }
+      if (variables?.hasUploads) {
+        setSelectedImages((prev) => {
+          prev.forEach((item) => {
+            if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+          });
+          return [];
+        });
+        setUploadNotice('');
       }
       setAiMessages((prev) => [
         ...prev,
@@ -143,6 +170,9 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
           time: new Date(),
         },
       ]);
+    },
+    onSettled: () => {
+      setUploadProgress(null);
     },
   });
 
@@ -187,8 +217,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
 
   useEffect(() => {
     if (!leadersMutation.isPending) return undefined;
-    const tokenCount = leadersQuery.trim().split(/\s+/).filter(Boolean).length;
-    const estimated = Math.max(10, Math.min(42, tokenCount * 3 + 11));
+    const estimated = 4;
     setSearchingSourceTarget(estimated);
     setSearchingSourceCount(0);
     const timer = setInterval(() => {
@@ -204,6 +233,86 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const isSendingLetter = letterMutation.isPending;
   const isLetterSendDisabled =
     isSendingLetter || !senderPO.trim() || !letterHead.trim() || !letterBody.trim() || !hasValidReceiver;
+  const hasSelectedImages = selectedImages.length > 0;
+  const uploadPercent = typeof uploadProgress === 'number' ? Math.min(100, Math.max(0, uploadProgress)) : null;
+  const isUploadingImages = isSendingMessage && uploadPercent !== null;
+
+  const removeImageById = (id) => {
+    setSelectedImages((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const clearSelectedImages = () => {
+    setSelectedImages((prev) => {
+      prev.forEach((item) => {
+        if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      });
+      return [];
+    });
+    setUploadNotice('');
+    setUploadProgress(null);
+  };
+
+  const onPickImages = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+
+    let skippedNonImage = 0;
+    let skippedSize = 0;
+    let reachedLimit = false;
+
+    setSelectedImages((prev) => {
+      const next = [...prev];
+      for (const file of files) {
+        if (!String(file.type || '').startsWith('image/')) {
+          skippedNonImage += 1;
+          continue;
+        }
+        if ((file.size || 0) > MAX_IMAGE_BYTES) {
+          skippedSize += 1;
+          continue;
+        }
+        const duplicate = next.some(
+          (item) =>
+            item.file.name === file.name &&
+            item.file.size === file.size &&
+            item.file.lastModified === file.lastModified,
+        );
+        if (duplicate) continue;
+        if (next.length >= MAX_IMAGE_ATTACHMENTS) {
+          reachedLimit = true;
+          break;
+        }
+        next.push({
+          id: `${file.name}_${file.size}_${file.lastModified}_${Math.random().toString(36).slice(2, 8)}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      }
+      return next;
+    });
+
+    const notices = [];
+    if (skippedNonImage > 0) {
+      notices.push(tr('Only image files are allowed.', 'Picha pekee ndizo zinazoruhusiwa.'));
+    }
+    if (skippedSize > 0) {
+      notices.push(tr('Some images were larger than 10MB and were skipped.', 'Baadhi ya picha zimezidi 10MB na zimeachwa.'));
+    }
+    if (reachedLimit) {
+      notices.push(
+        tr(
+          `You can attach up to ${MAX_IMAGE_ATTACHMENTS} images per message.`,
+          `Unaweza kuambatisha hadi picha ${MAX_IMAGE_ATTACHMENTS} kwa ujumbe mmoja.`,
+        ),
+      );
+    }
+    setUploadNotice(notices.join(' '));
+  };
 
   const sendMessage = () => {
     const text = input.trim();
@@ -219,14 +328,38 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       },
     ]);
 
-    chatMutation.mutate({
+    const files = selectedImages.map((item) => item.file);
+    const hasUploads = files.length > 0;
+    let payload = {
       message: text,
       session_id: sessionId,
       include_knowledge_base: true,
       target_leader: leader,
       target_location: location,
       auto_submit_new_complaint: true,
-    });
+    };
+    let onUploadProgress;
+
+    if (hasUploads) {
+      const formData = new FormData();
+      formData.append('message', text);
+      formData.append('session_id', sessionId);
+      formData.append('include_knowledge_base', 'true');
+      formData.append('target_leader', leader);
+      formData.append('target_location', location);
+      formData.append('auto_submit_new_complaint', 'true');
+      files.forEach((file) => formData.append('images', file));
+      payload = formData;
+      setUploadProgress(0);
+      onUploadProgress = (event) => {
+        if (!event.total) return;
+        setUploadProgress(Math.round((event.loaded / event.total) * 100));
+      };
+    } else {
+      setUploadProgress(null);
+    }
+
+    chatMutation.mutate({ payload, onUploadProgress, hasUploads });
 
     setInput('');
   };
@@ -264,7 +397,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
     const q = leadersQuery.trim();
     if (!q || leadersMutation.isPending) return;
     setLeadersResult(null);
-    leadersMutation.mutate({ query: q, max_results: 8 });
+    leadersMutation.mutate({ query: q, max_results: 4 });
   };
 
   const leaderPromptSuggestions = [
@@ -627,6 +760,187 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 </div>
               </div>
             )}
+
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={onPickImages}
+              style={{ display: 'none' }}
+            />
+
+            <div
+              style={{
+                border: `1px solid ${border}`,
+                borderRadius: 10,
+                background: sub,
+                padding: isMobile ? '8px' : '10px 12px',
+                marginBottom: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  marginBottom: hasSelectedImages || uploadNotice || isUploadingImages ? 8 : 0,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={isSendingMessage}
+                  style={{
+                    border: `1px solid ${border}`,
+                    borderRadius: 8,
+                    background: surface,
+                    color: inputTxt,
+                    padding: isMobile ? '6px 8px' : '7px 10px',
+                    fontSize: isMobile ? 11.5 : 12.5,
+                    fontWeight: 600,
+                    cursor: isSendingMessage ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <i className="fas fa-image" />
+                  {tr('Attach Image', 'Ambatanisha Picha')}
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: textSub }}>
+                    {hasSelectedImages
+                      ? `${selectedImages.length}/${MAX_IMAGE_ATTACHMENTS} ${tr('selected', 'zimechaguliwa')}`
+                      : tr('No image selected', 'Hakuna picha iliyochaguliwa')}
+                  </span>
+                  {hasSelectedImages && (
+                    <button
+                      type="button"
+                      onClick={clearSelectedImages}
+                      disabled={isSendingMessage}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#ef4444',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: isSendingMessage ? 'not-allowed' : 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {tr('Clear', 'Futa')}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {uploadNotice && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#b45309',
+                    background: dark ? '#422006' : '#fef3c7',
+                    border: dark ? '1px solid #92400e' : '1px solid #fcd34d',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    marginBottom: hasSelectedImages ? 8 : 0,
+                  }}
+                >
+                  {uploadNotice}
+                </div>
+              )}
+
+              {hasSelectedImages && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    overflowX: 'auto',
+                    paddingBottom: 2,
+                  }}
+                >
+                  {selectedImages.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        position: 'relative',
+                        width: isMobile ? 62 : 74,
+                        height: isMobile ? 62 : 74,
+                        minWidth: isMobile ? 62 : 74,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        border: `1px solid ${border}`,
+                        background: dark ? '#0f172a' : '#fff',
+                      }}
+                    >
+                      <img
+                        src={item.previewUrl}
+                        alt={item.file.name}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImageById(item.id)}
+                        disabled={isSendingMessage}
+                        style={{
+                          position: 'absolute',
+                          right: 4,
+                          top: 4,
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          border: 'none',
+                          background: 'rgba(15,23,42,0.75)',
+                          color: '#fff',
+                          fontSize: 10,
+                          cursor: isSendingMessage ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        aria-label={tr('Remove image', 'Ondoa picha')}
+                      >
+                        <i className="fas fa-times" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {isUploadingImages && (
+                <div style={{ marginTop: hasSelectedImages ? 8 : 0 }}>
+                  <div style={{ fontSize: 11.5, color: textSub, marginBottom: 5 }}>
+                    {tr('Uploading image(s)', 'Inapakia picha')} {uploadPercent}%
+                  </div>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: 8,
+                      borderRadius: 999,
+                      background: dark ? '#1f2937' : '#e2e8f0',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${uploadPercent || 0}%`,
+                        height: '100%',
+                        borderRadius: 999,
+                        background: 'linear-gradient(90deg, #2563eb 0%, #06b6d4 100%)',
+                        transition: 'width 0.14s linear',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <textarea

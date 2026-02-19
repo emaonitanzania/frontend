@@ -29,6 +29,33 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString();
 };
 
+const getApiOrigin = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+  try {
+    return new URL(apiUrl).origin;
+  } catch (_error) {
+    return 'http://localhost:8000';
+  }
+};
+
+const toAbsoluteAssetUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('//')) return `https:${raw}`;
+  const origin = getApiOrigin();
+  if (raw.startsWith('/')) return `${origin}${raw}`;
+  return `${origin}/${raw}`;
+};
+
+const isImageAttachment = (attachment) => {
+  const fileType = String(attachment?.file_type || '').toLowerCase();
+  if (fileType.startsWith('image/')) return true;
+
+  const source = String(attachment?.url || attachment?.filename || '').toLowerCase();
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(source);
+};
+
 export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
@@ -627,120 +654,228 @@ export function LeaderPortalPage({ dark, isMobile = false, tx }) {
               <StateBlock dark={dark} label={tr('No assigned complaints right now.', 'Kwa sasa hakuna malalamiko uliyopewa.')} />
             )}
 
-            {!assignedQuery.isLoading && !assignedQuery.isError && assignedQuery.data?.map((complaint) => (
-              <div
-                key={complaint.id}
-                style={{
-                  background: surface,
-                  border: `1px solid ${border}`,
-                  borderRadius: 12,
-                  padding: isMobile ? 14 : 18,
-                  marginBottom: 12,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexDirection: isMobile ? 'column' : 'row' }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{complaint.title}</div>
-                    <div style={{ fontSize: 13, color: textSub }}>
-                      {tr('Category', 'Kategoria')}: {complaint.category} | {tr('Status', 'Hali')}: {complaint.status}
-                    </div>
-                    <div style={{ fontSize: 13, color: textSub }}>
-                      {tr('Location', 'Mahali')}: {complaint.location} | {tr('Submitted', 'Imewasilishwa')}: {formatDateTime(complaint.submitted_at)}
-                    </div>
-                    {complaint.metadata?.type === 'letter' && (
-                      <div style={{ marginTop: 4, fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
-                        {tr('Formal Letter', 'Barua Rasmi')}
-                      </div>
-                    )}
-                  </div>
-                </div>
+            {!assignedQuery.isLoading && !assignedQuery.isError && assignedQuery.data?.map((complaint) => {
+              const allAttachments = Array.isArray(complaint.attachments) ? complaint.attachments : [];
+              const imageAttachments = allAttachments.filter(isImageAttachment);
+              const nonImageAttachments = allAttachments.filter((item) => !isImageAttachment(item));
 
+              return (
                 <div
+                  key={complaint.id}
                   style={{
-                    marginTop: 10,
-                    padding: '10px 12px',
-                    borderRadius: 8,
+                    background: surface,
                     border: `1px solid ${border}`,
-                    background: inputBg,
-                    whiteSpace: 'pre-wrap',
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    color: textColor,
+                    borderRadius: 12,
+                    padding: isMobile ? 14 : 18,
+                    marginBottom: 12,
                   }}
                 >
-                  {complaint.description}
-                </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexDirection: isMobile ? 'column' : 'row' }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{complaint.title}</div>
+                      <div style={{ fontSize: 13, color: textSub }}>
+                        {tr('Category', 'Kategoria')}: {complaint.category} | {tr('Status', 'Hali')}: {complaint.status}
+                      </div>
+                      <div style={{ fontSize: 13, color: textSub }}>
+                        {tr('Location', 'Mahali')}: {complaint.location} | {tr('Submitted', 'Imewasilishwa')}: {formatDateTime(complaint.submitted_at)}
+                      </div>
+                      {complaint.metadata?.type === 'letter' && (
+                        <div style={{ marginTop: 4, fontSize: 12, color: '#2563eb', fontWeight: 600 }}>
+                          {tr('Formal Letter', 'Barua Rasmi')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                <div style={{ marginTop: 10 }}>
-                  <textarea
-                    rows={3}
-                    placeholder={tr('Write your official response to the citizen...', 'Andika jibu lako rasmi kwa mwananchi...')}
-                    value={responsesByComplaint[complaint.id] || ''}
-                    onChange={(e) => setResponsesByComplaint((prev) => ({ ...prev, [complaint.id]: e.target.value }))}
+                  <div
                     style={{
-                      width: '100%',
+                      marginTop: 10,
                       padding: '10px 12px',
                       borderRadius: 8,
                       border: `1px solid ${border}`,
                       background: inputBg,
-                      color: textColor,
-                      outline: 'none',
-                      resize: 'vertical',
-                      fontSize: 14,
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: 'flex',
-                    gap: 8,
-                    flexDirection: isMobile ? 'column' : 'row',
-                    alignItems: isMobile ? 'stretch' : 'center',
-                  }}
-                >
-                  <button
-                    onClick={() => sendResponse(complaint.id, false)}
-                    disabled={respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim()}
-                    style={{
-                      background:
-                        respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? '#94a3b8' : '#2563eb',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '9px 14px',
-                      cursor:
-                        respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? 'not-allowed' : 'pointer',
-                      fontSize: 13,
-                      fontWeight: 600,
                     }}
                   >
-                    {tr('Send Response', 'Tuma Jibu')}
-                  </button>
+                    <div style={{ fontSize: 12, color: textSub, marginBottom: 6, fontWeight: 600 }}>
+                      {tr('Complaint Description', 'Maelezo ya Malalamiko')}
+                    </div>
+                    <div
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                        color: textColor,
+                      }}
+                    >
+                      {complaint.description}
+                    </div>
+                  </div>
 
-                  <button
-                    onClick={() => sendResponse(complaint.id, true)}
-                    disabled={respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim()}
+                  {imageAttachments.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 12, color: textSub, marginBottom: 6, fontWeight: 600 }}>
+                        {tr('Uploaded Photo Evidence', 'Picha Zilizopakiwa kama Ushahidi')}
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(160px, 1fr))',
+                          gap: 8,
+                        }}
+                      >
+                        {imageAttachments.map((attachment, index) => {
+                          const imageUrl = toAbsoluteAssetUrl(attachment.url);
+                          const imageName = attachment.filename || `${tr('Photo', 'Picha')} ${index + 1}`;
+                          return (
+                            <a
+                              key={`${attachment.id || imageName}_${index}`}
+                              href={imageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                borderRadius: 8,
+                                border: `1px solid ${border}`,
+                                overflow: 'hidden',
+                                textDecoration: 'none',
+                                background: inputBg,
+                              }}
+                              title={tr('Open full image', 'Fungua picha kamili')}
+                            >
+                              <div style={{ width: '100%', aspectRatio: '4 / 3', background: dark ? '#0f172a' : '#f8fafc' }}>
+                                <img
+                                  src={imageUrl}
+                                  alt={`${imageName} - ${complaint.title || ''}`}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    display: 'block',
+                                  }}
+                                />
+                              </div>
+                              <div style={{ padding: '6px 8px' }}>
+                                <div style={{ fontSize: 12, color: textColor, fontWeight: 600, overflowWrap: 'anywhere' }}>
+                                  {imageName}
+                                </div>
+                                <div style={{ fontSize: 11, color: textSub, marginTop: 2 }}>
+                                  {tr('Description', 'Maelezo')}: {(complaint.description || '').slice(0, 80)}
+                                  {(complaint.description || '').length > 80 ? '...' : ''}
+                                </div>
+                              </div>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {nonImageAttachments.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 12, color: textSub, marginBottom: 6, fontWeight: 600 }}>
+                        {tr('Other Attachments', 'Viambatisho Vingine')}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {nonImageAttachments.map((attachment, index) => {
+                          const fileUrl = toAbsoluteAssetUrl(attachment.url);
+                          const fileName = attachment.filename || `${tr('Attachment', 'Kiambatisho')} ${index + 1}`;
+                          return (
+                            <a
+                              key={`${attachment.id || fileName}_${index}`}
+                              href={fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                border: `1px solid ${border}`,
+                                borderRadius: 8,
+                                padding: '8px 10px',
+                                textDecoration: 'none',
+                                color: '#2563eb',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                background: inputBg,
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              <i className="fas fa-paperclip" style={{ marginRight: 8 }} />
+                              {fileName}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 10 }}>
+                    <textarea
+                      rows={3}
+                      placeholder={tr('Write your official response to the citizen...', 'Andika jibu lako rasmi kwa mwananchi...')}
+                      value={responsesByComplaint[complaint.id] || ''}
+                      onChange={(e) => setResponsesByComplaint((prev) => ({ ...prev, [complaint.id]: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: `1px solid ${border}`,
+                        background: inputBg,
+                        color: textColor,
+                        outline: 'none',
+                        resize: 'vertical',
+                        fontSize: 14,
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+
+                  <div
                     style={{
-                      background:
-                        respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? '#94a3b8' : '#16a34a',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '9px 14px',
-                      cursor:
-                        respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? 'not-allowed' : 'pointer',
-                      fontSize: 13,
-                      fontWeight: 600,
+                      marginTop: 10,
+                      display: 'flex',
+                      gap: 8,
+                      flexDirection: isMobile ? 'column' : 'row',
+                      alignItems: isMobile ? 'stretch' : 'center',
                     }}
                   >
-                    {tr('Send & Resolve', 'Tuma na Funga')}
-                  </button>
+                    <button
+                      onClick={() => sendResponse(complaint.id, false)}
+                      disabled={respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim()}
+                      style={{
+                        background:
+                          respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? '#94a3b8' : '#2563eb',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '9px 14px',
+                        cursor:
+                          respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? 'not-allowed' : 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {tr('Send Response', 'Tuma Jibu')}
+                    </button>
+
+                    <button
+                      onClick={() => sendResponse(complaint.id, true)}
+                      disabled={respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim()}
+                      style={{
+                        background:
+                          respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? '#94a3b8' : '#16a34a',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '9px 14px',
+                        cursor:
+                          respondMutation.isPending || !(responsesByComplaint[complaint.id] || '').trim() ? 'not-allowed' : 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {tr('Send & Resolve', 'Tuma na Funga')}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -3,7 +3,6 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
-  headers: { 'Content-Type': 'application/json' },
 });
 
 const SESSION_KEY = 'emaoni_session';
@@ -77,13 +76,32 @@ const tokenHeader = (token) => ({
   },
 });
 
+const isFormDataPayload = (data) => typeof FormData !== 'undefined' && data instanceof FormData;
+
+const buildPayloadConfig = (data, extra = {}) => {
+  const config = { ...extra };
+  if (isFormDataPayload(data)) {
+    config.headers = {
+      ...(config.headers || {}),
+      'Content-Type': 'multipart/form-data',
+    };
+  }
+  return config;
+};
+
 const withSession = (sessionId, params = {}) => ({
   params: sessionId ? { ...params, session_id: sessionId } : params,
 });
 
 export const chatAPI = {
-  sendMessage: async (data) => {
-    const res = await api.post('/ai/chat/', data);
+  sendMessage: async (data, options = {}) => {
+    const res = await api.post(
+      '/ai/chat/',
+      data,
+      buildPayloadConfig(data, {
+        onUploadProgress: options.onUploadProgress,
+      }),
+    );
     return res.data;
   },
   knowLeaders: async (data) => {
@@ -98,7 +116,7 @@ export const chatAPI = {
 
 export const complaintsAPI = {
   create: async (data) => {
-    const res = await api.post('/complaints/', data);
+    const res = await api.post('/complaints/', data, buildPayloadConfig(data));
     return res.data;
   },
   list: async (sessionId) => {
@@ -162,7 +180,11 @@ export const leaderAPI = {
     return res.data;
   },
   respondToComplaint: async (complaintId, data) => {
-    const res = await api.post(`/complaints/${complaintId}/leader/respond/`, data);
+    const res = await api.post(
+      `/complaints/${complaintId}/leader/respond/`,
+      data,
+      buildPayloadConfig(data),
+    );
     return res.data;
   },
 };
