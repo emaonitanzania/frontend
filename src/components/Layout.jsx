@@ -10,9 +10,11 @@ const navItems = [
   { path: '/unreplied', icon: 'fa-exclamation-circle', label: 'Unreplied', labelSw: 'Bila Majibu' },
   { path: '/history', icon: 'fa-history', label: 'History', labelSw: 'Historia' },
   { path: '/escalation', icon: 'fa-level-up-alt', label: 'Escalation', labelSw: 'Ngazi za Rufaa' },
-  { path: '/faqs', icon: 'fa-question-circle', label: 'FAQs', labelSw: 'Maswali' },
+  { path: '/leader/insights', icon: 'fa-chart-pie', label: 'Insights',      labelSw: 'Maarifa' }, 
   { path: '/leader/register', icon: 'fa-user-plus', label: 'Leader Register', labelSw: 'Sajili Kiongozi' },
   { path: '/leader/portal', icon: 'fa-user-shield', label: 'Leader Portal', labelSw: 'Tovuti ya Kiongozi' },
+  { path: '/faqs', icon: 'fa-question-circle', label: 'FAQs', labelSw: 'Maswali' },
+
 ];
 
 const getInitialMobile = () => {

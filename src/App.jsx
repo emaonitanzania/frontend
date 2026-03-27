@@ -1,9 +1,11 @@
+// src/App.jsx  (UPDATED — adds /leader/insights route)
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './components/Layout';
 import ChatPage from './pages/ChatPage';
 import { InboxPage, UnrepliedPage, HistoryPage, EscalationPage, FAQsPage } from './pages/OtherPages';
 import { LeaderPortalPage, LeaderRegisterPage } from './pages/LeaderPages';
+import LeaderInsightsPage from './pages/LeaderInsightsPage';
 import './index.css';
 
 const qc = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } } });
@@ -24,6 +26,8 @@ export default function App() {
               <Route path="/faqs" element={<FAQsPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
               <Route path="/leader/register" element={<LeaderRegisterPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
               <Route path="/leader/portal" element={<LeaderPortalPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
+              {/* ── NEW: Leader Insights Dashboard ── */}
+              <Route path="/leader/insights" element={<LeaderInsightsPage dark={dark} isMobile={isMobile} language={language} tx={tx} />} />
             </Routes>
           )}
         </Layout>
