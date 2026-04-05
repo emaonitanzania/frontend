@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,7 +33,7 @@ const getApiOrigin = () => {
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
   try {
     return new URL(apiUrl).origin;
-  } catch (_error) {
+  } catch {
     return 'http://localhost:8000';
   }
 };
@@ -60,7 +60,7 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
   const [adminToken, setAdminToken] = useState(() => getAdminToken());
-  const [adminLoginForm, setAdminLoginForm] = useState({ email: '', password: '' });
+  const [adminLoginForm, setAdminLoginForm] = useState({ identifier: '', password: '' });
   const cachedAdminProfile = useMemo(() => getAdminProfile(), []);
   const [form, setForm] = useState({
     username: '',
@@ -71,6 +71,7 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
     title: '',
     level: 'Ward',
     location: '',
+    postcode: '',
     phone: '',
   });
   const [registrationSuccess, setRegistrationSuccess] = useState('');
@@ -87,7 +88,17 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
 
   const adminMeQuery = useQuery({
     queryKey: ['admin', 'me', adminToken],
-    queryFn: () => adminAPI.me(),
+    queryFn: async () => {
+      try {
+        return await adminAPI.me();
+      } catch (error) {
+        if ([401, 403].includes(error?.response?.status)) {
+          clearAdminAuth();
+          setAdminToken(null);
+        }
+        throw error;
+      }
+    },
     enabled: !!adminToken,
     retry: false,
   });
@@ -111,17 +122,11 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
         title: '',
         level: 'Ward',
         location: '',
+        postcode: '',
         phone: '',
       });
     },
   });
-
-  useEffect(() => {
-    if (adminMeQuery.isError && [401, 403].includes(adminMeQuery.error?.response?.status)) {
-      clearAdminAuth();
-      setAdminToken(null);
-    }
-  }, [adminMeQuery.error, adminMeQuery.isError]);
 
   const border = dark ? '#334155' : '#e2e8f0';
   const surface = dark ? '#1e293b' : '#ffffff';
@@ -164,7 +169,7 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
       if (adminToken) {
         await adminAPI.logout();
       }
-    } catch (_error) {
+    } catch {
       // ignore logout network errors; local cleanup still happens.
     }
     clearAdminAuth();
@@ -193,12 +198,11 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
             <div style={{ marginBottom: 12, fontSize: 15, fontWeight: 600 }}>
               {tr('Superuser Login Required', 'Inahitaji Kuingia kama Superuser')}
             </div>
-            <Field label={tr('Admin Email', 'Barua Pepe ya Admin')} dark={dark}>
+            <Field label={tr('Admin Username or Email', 'Jina la mtumiaji au barua pepe ya admin')} dark={dark}>
               <input
                 required
-                type="email"
-                value={adminLoginForm.email}
-                onChange={(e) => setAdminLoginForm((prev) => ({ ...prev, email: e.target.value }))}
+                value={adminLoginForm.identifier}
+                onChange={(e) => setAdminLoginForm((prev) => ({ ...prev, identifier: e.target.value }))}
                 style={fieldStyle}
               />
             </Field>
@@ -358,6 +362,14 @@ export function LeaderRegisterPage({ dark, isMobile = false, tx }) {
                 style={fieldStyle}
               />
             </Field>
+            <Field label={tr('Postcode (optional)', 'Postcode (si lazima)')} dark={dark}>
+              <input
+                value={form.postcode}
+                onChange={(e) => setForm((prev) => ({ ...prev, postcode: e.target.value.replace(/[^\d]/g, '').slice(0, 5) }))}
+                placeholder="41202"
+                style={fieldStyle}
+              />
+            </Field>
             <Field label={tr('Phone (optional)', 'Simu (si lazima)')} dark={dark}>
               <input
                 value={form.phone}
@@ -422,7 +434,7 @@ export function LeaderPortalPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
   const [token, setToken] = useState(() => getLeaderToken());
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginForm, setLoginForm] = useState({ identifier: '', password: '' });
   const [responsesByComplaint, setResponsesByComplaint] = useState({});
   const cachedProfile = useMemo(() => getLeaderProfile(), []);
 
@@ -438,7 +450,17 @@ export function LeaderPortalPage({ dark, isMobile = false, tx }) {
 
   const meQuery = useQuery({
     queryKey: ['leader', 'me', token],
-    queryFn: () => leaderAPI.me(),
+    queryFn: async () => {
+      try {
+        return await leaderAPI.me();
+      } catch (error) {
+        if (error?.response?.status === 401) {
+          clearLeaderAuth();
+          setToken(null);
+        }
+        throw error;
+      }
+    },
     enabled: !!token,
     retry: false,
   });
@@ -459,19 +481,12 @@ export function LeaderPortalPage({ dark, isMobile = false, tx }) {
     },
   });
 
-  useEffect(() => {
-    if (meQuery.isError && meQuery.error?.response?.status === 401) {
-      clearLeaderAuth();
-      setToken(null);
-    }
-  }, [meQuery.isError, meQuery.error]);
-
   const logout = async () => {
     try {
       if (token) {
         await leaderAPI.logout();
       }
-    } catch (_error) {
+    } catch {
       // ignore logout network errors; local cleanup still happens.
     }
     clearLeaderAuth();
@@ -544,11 +559,11 @@ export function LeaderPortalPage({ dark, isMobile = false, tx }) {
               {tr('Leader Login', 'Kuingia kwa Kiongozi')}
             </div>
 
-            <Field label={tr('Username', 'Jina la Mtumiaji')} dark={dark}>
+            <Field label={tr('Username or Email', 'Jina la mtumiaji au barua pepe')} dark={dark}>
               <input
                 required
-                value={loginForm.username}
-                onChange={(e) => setLoginForm((prev) => ({ ...prev, username: e.target.value }))}
+                value={loginForm.identifier}
+                onChange={(e) => setLoginForm((prev) => ({ ...prev, identifier: e.target.value }))}
                 style={fieldStyle}
               />
             </Field>
@@ -628,6 +643,7 @@ export function LeaderPortalPage({ dark, isMobile = false, tx }) {
                   </div>
                   <div style={{ fontSize: 13, color: textSub }}>
                     {(meQuery.data?.title || cachedProfile?.title || tr('Leader', 'Kiongozi'))} | {(meQuery.data?.level || cachedProfile?.level || '--')} | {(meQuery.data?.location || cachedProfile?.location || '--')}
+                    {(meQuery.data?.postcode || cachedProfile?.postcode) ? ` | ${meQuery.data?.postcode || cachedProfile?.postcode}` : ''}
                   </div>
                 </div>
                 <button

@@ -31,13 +31,28 @@ const LOCATIONS = [
   { value: 'national', label: 'National Level', labelSw: 'Ngazi ya Taifa' },
 ];
 
+const CATEGORY_OPTIONS = [
+  { value: '', label: 'Select category (optional)', labelSw: 'Chagua kategoria (si lazima)' },
+  { value: 'water', label: 'Water Services', labelSw: 'Huduma za Maji' },
+  { value: 'electricity', label: 'Electricity', labelSw: 'Umeme' },
+  { value: 'roads', label: 'Roads & Infrastructure', labelSw: 'Barabara na Miundombinu' },
+  { value: 'health', label: 'Health Services', labelSw: 'Huduma za Afya' },
+  { value: 'education', label: 'Education', labelSw: 'Elimu' },
+  { value: 'security', label: 'Security', labelSw: 'Usalama' },
+  { value: 'corruption', label: 'Corruption', labelSw: 'Rushwa' },
+  { value: 'housing', label: 'Housing', labelSw: 'Makazi' },
+  { value: 'sanitation', label: 'Sanitation', labelSw: 'Usafi' },
+  { value: 'transportation', label: 'Transportation', labelSw: 'Usafiri' },
+  { value: 'other', label: 'Other', labelSw: 'Nyingine' },
+];
+
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export default function ChatPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
   const queryClient = useQueryClient();
-  const createWelcomeMessage = () => ({
+  const [welcomeMessage] = useState(() => ({
     id: 'welcome_ai',
     from: 'bot',
     text: tr(
@@ -45,15 +60,17 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       'Habari! Mimi ni E-Maoni, msaidizi wako wa AI. Eleza changamoto yako na nitakusaidia mara moja.'
     ),
     time: new Date(),
-  });
+  }));
 
   const [mode, setMode] = useState('ai'); // 'ai' | 'barua'
-  const [aiMessages, setAiMessages] = useState([createWelcomeMessage()]);
+  const [aiMessages, setAiMessages] = useState([welcomeMessage]);
   const [baruaNotice, setBaruaNotice] = useState('');
   const [baruaNoticeType, setBaruaNoticeType] = useState('success');
   const [input, setInput] = useState('');
   const [leader, setLeader] = useState('ward');
   const [location, setLocation] = useState('local');
+  const [postcode, setPostcode] = useState('');
+  const [category, setCategory] = useState('');
   const [sessionId] = useState(getOrCreateSession);
   const [receivers, setReceivers] = useState(['']);
   const [senderPO, setSenderPO] = useState('');
@@ -81,8 +98,14 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
     const item = LOCATIONS.find((entry) => entry.value === location);
     return item ? tr(item.label, item.labelSw) : tr('Unspecified', 'Haijabainishwa');
   })();
+  const categoryLabel = (() => {
+    const item = CATEGORY_OPTIONS.find((entry) => entry.value === category);
+    return item ? tr(item.label, item.labelSw) : tr('Unspecified', 'Haijabainishwa');
+  })();
   const baruaLeaders = LEADERS.filter((item) => item.value !== 'ai');
   const hasValidReceiver = receivers.some((r) => r.trim());
+  const normalizedPostcode = postcode.replace(/[^\d]/g, '').slice(0, 5);
+  const hasInvalidPostcode = postcode.length > 0 && normalizedPostcode.length !== 5;
 
   const conversationQuery = useQuery({
     queryKey: ['ai', 'conversation', sessionId],
@@ -92,35 +115,32 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   });
 
   useEffect(() => {
-    if (historyHydratedRef.current || !conversationQuery.isSuccess) return;
+    if (historyHydratedRef.current || !conversationQuery.isSuccess) return undefined;
     const payload = conversationQuery.data;
     const conversations = Array.isArray(payload) ? payload : (payload?.results || []);
     const conversation = conversations.find((item) => item.session_id === sessionId) || conversations[0];
     const storedMessages = Array.isArray(conversation?.messages) ? conversation.messages : [];
+    const nextMessages = storedMessages.length > 0
+      ? storedMessages.map((msg) => ({
+          id: `srv_${msg.id}`,
+          from: msg.sender === 'user' ? 'user' : 'bot',
+          text: msg.content || '',
+          time: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+        }))
+      : [welcomeMessage];
 
-    if (storedMessages.length > 0) {
-      const mapped = storedMessages.map((msg) => ({
-        id: `srv_${msg.id}`,
-        from: msg.sender === 'user' ? 'user' : 'bot',
-        text: msg.content || '',
-        time: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-      }));
-      setAiMessages(mapped);
-    } else {
-      setAiMessages([createWelcomeMessage()]);
-    }
-    historyHydratedRef.current = true;
-  }, [conversationQuery.data, conversationQuery.isSuccess, sessionId]);
+    const timer = window.setTimeout(() => {
+      setAiMessages(nextMessages);
+      historyHydratedRef.current = true;
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [conversationQuery.data, conversationQuery.isSuccess, sessionId, welcomeMessage]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mode, aiMessages]);
 
-  useEffect(() => {
-    if (!isMobile) {
-      setShowAiRoutingOptions(true);
-    }
-  }, [isMobile]);
 
   useEffect(() => {
     selectedImagesRef.current = selectedImages;
@@ -216,26 +236,24 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   });
 
   useEffect(() => {
-    if (!leadersMutation.isPending) return undefined;
-    const estimated = 4;
-    setSearchingSourceTarget(estimated);
-    setSearchingSourceCount(0);
-    const timer = setInterval(() => {
+    if (!leadersMutation.isPending || !searchingSourceTarget) return undefined;
+    const timer = window.setInterval(() => {
       setSearchingSourceCount((prev) => {
-        if (prev >= estimated) return estimated;
+        if (prev >= searchingSourceTarget) return searchingSourceTarget;
         return prev + 1;
       });
     }, 90);
-    return () => clearInterval(timer);
-  }, [leadersMutation.isPending, leadersQuery]);
+    return () => window.clearInterval(timer);
+  }, [leadersMutation.isPending, searchingSourceTarget]);
 
   const isSendingMessage = chatMutation.isPending;
   const isSendingLetter = letterMutation.isPending;
   const isLetterSendDisabled =
-    isSendingLetter || !senderPO.trim() || !letterHead.trim() || !letterBody.trim() || !hasValidReceiver;
+    isSendingLetter || !senderPO.trim() || !letterHead.trim() || !letterBody.trim() || !hasValidReceiver || hasInvalidPostcode;
   const hasSelectedImages = selectedImages.length > 0;
   const uploadPercent = typeof uploadProgress === 'number' ? Math.min(100, Math.max(0, uploadProgress)) : null;
   const isUploadingImages = isSendingMessage && uploadPercent !== null;
+  const effectiveShowAiRoutingOptions = !isMobile || showAiRoutingOptions;
 
   const removeImageById = (id) => {
     setSelectedImages((prev) => {
@@ -316,7 +334,7 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
 
   const sendMessage = () => {
     const text = input.trim();
-    if (!text || isSendingMessage) return;
+    if (!text || isSendingMessage || hasInvalidPostcode) return;
 
     setAiMessages((prev) => [
       ...prev,
@@ -338,6 +356,12 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       target_location: location,
       auto_submit_new_complaint: true,
     };
+    if (normalizedPostcode) {
+      payload.postcode = normalizedPostcode;
+    }
+    if (category) {
+      payload.category = category;
+    }
     let onUploadProgress;
 
     if (hasUploads) {
@@ -348,6 +372,12 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       formData.append('target_leader', leader);
       formData.append('target_location', location);
       formData.append('auto_submit_new_complaint', 'true');
+      if (normalizedPostcode) {
+        formData.append('postcode', normalizedPostcode);
+      }
+      if (category) {
+        formData.append('category', category);
+      }
       files.forEach((file) => formData.append('images', file));
       payload = formData;
       setUploadProgress(0);
@@ -376,6 +406,8 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
       body: letterBody.trim(),
       leader,
       location: locationLabel,
+      postcode: normalizedPostcode,
+      category,
     });
 
     setBaruaNotice('');
@@ -396,8 +428,11 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
   const runLeaderLookup = () => {
     const q = leadersQuery.trim();
     if (!q || leadersMutation.isPending) return;
+    const estimated = 4;
+    setSearchingSourceTarget(estimated);
+    setSearchingSourceCount(0);
     setLeadersResult(null);
-    leadersMutation.mutate({ query: q, max_results: 4 });
+    leadersMutation.mutate({ query: q, max_results: estimated });
   };
 
   const leaderPromptSuggestions = [
@@ -721,11 +756,13 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                 </button>
                 <div style={{ marginTop: 2, fontSize: 10.8, color: textSub }}>
                   {leaderLabel} • {locationLabel}
+                  {normalizedPostcode ? ` • ${normalizedPostcode}` : ''}
+                  {category ? ` • ${categoryLabel}` : ''}
                 </div>
               </div>
             )}
 
-            {(!isMobile || showAiRoutingOptions) && (
+            {effectiveShowAiRoutingOptions && (
               <div
                 style={{
                   display: 'grid',
@@ -754,6 +791,36 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                     {LOCATIONS.map((l) => (
                       <option key={l.value} value={l.value}>
                         {tr(l.label, l.labelSw)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                    {tr('Postcode:', 'Postcode:')}
+                  </label>
+                  <input
+                    value={postcode}
+                    onChange={(e) => setPostcode(e.target.value.replace(/[^\d]/g, '').slice(0, 5))}
+                    placeholder="41202"
+                    inputMode="numeric"
+                    maxLength={5}
+                    style={inputStyle}
+                  />
+                  {hasInvalidPostcode && (
+                    <div style={{ marginTop: 4, fontSize: 11.5, color: '#dc2626' }}>
+                      {tr('Postcode must be 5 digits.', 'Postcode lazima iwe tarakimu 5.')}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                    {tr('Category:', 'Kategoria:')}
+                  </label>
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} style={selectStyle}>
+                    {CATEGORY_OPTIONS.map((item) => (
+                      <option key={item.value || 'blank'} value={item.value}>
+                        {tr(item.label, item.labelSw)}
                       </option>
                     ))}
                   </select>
@@ -972,15 +1039,15 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
               />
               <button
                 onClick={sendMessage}
-                disabled={isSendingMessage || !input.trim()}
+                disabled={isSendingMessage || !input.trim() || hasInvalidPostcode}
                 style={{
                   width: isMobile ? 34 : 50,
                   height: isMobile ? 34 : 50,
                   borderRadius: isMobile ? 8 : 10,
-                  background: isSendingMessage || !input.trim() ? '#94a3b8' : '#2563eb',
+                  background: isSendingMessage || !input.trim() || hasInvalidPostcode ? '#94a3b8' : '#2563eb',
                   color: '#fff',
                   border: 'none',
-                  cursor: isSendingMessage || !input.trim() ? 'not-allowed' : 'pointer',
+                  cursor: isSendingMessage || !input.trim() || hasInvalidPostcode ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1050,6 +1117,36 @@ export default function ChatPage({ dark, isMobile = false, tx }) {
                   {LOCATIONS.map((l) => (
                     <option key={l.value} value={l.value}>
                       {tr(l.label, l.labelSw)}
+                    </option>
+                    ))}
+                  </select>
+                </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                  {tr('Postcode:', 'Postcode:')}
+                </label>
+                <input
+                  value={postcode}
+                  onChange={(e) => setPostcode(e.target.value.replace(/[^\d]/g, '').slice(0, 5))}
+                  placeholder="41202"
+                  inputMode="numeric"
+                  maxLength={5}
+                  style={inputStyle}
+                />
+                {hasInvalidPostcode && (
+                  <div style={{ marginTop: 4, fontSize: 11.5, color: '#dc2626' }}>
+                    {tr('Postcode must be 5 digits.', 'Postcode lazima iwe tarakimu 5.')}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontSize: 13, fontWeight: 500, color: textSub }}>
+                  {tr('Category:', 'Kategoria:')}
+                </label>
+                <select value={category} onChange={(e) => setCategory(e.target.value)} style={selectStyle}>
+                  {CATEGORY_OPTIONS.map((item) => (
+                    <option key={item.value || 'blank'} value={item.value}>
+                      {tr(item.label, item.labelSw)}
                     </option>
                   ))}
                 </select>

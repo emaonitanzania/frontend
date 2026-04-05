@@ -1,5 +1,5 @@
 // src/pages/LeaderInsightsPage.jsx
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { leaderAPI, getLeaderToken, getLeaderProfile } from '../services/api';
 
@@ -38,6 +38,17 @@ const URGENCY_COLORS = {
   high: '#f97316',
   medium: '#f59e0b',
   low: '#22c55e',
+};
+
+const buildUrgencyCount = (complaints) => {
+  const urgencyCount = { critical: 0, high: 0, medium: 0, low: 0 };
+  complaints.forEach((complaint) => {
+    const urgency = complaint?.urgency || 'medium';
+    if (Object.prototype.hasOwnProperty.call(urgencyCount, urgency)) {
+      urgencyCount[urgency] += 1;
+    }
+  });
+  return urgencyCount;
 };
 
 // Estimate age group from complaint context (heuristic from keywords)
@@ -113,6 +124,83 @@ const computeInsights = (complaints) => {
   };
 };
 
+const bucketAgeGroup = (ageGroup) => {
+  if (!ageGroup) return null;
+  if (ageGroup === 'Under 18' || ageGroup === '18-25') return '15-30';
+  if (ageGroup === '60+') return '60+';
+  return '30-60';
+};
+
+const normalizeInsights = (insightsPayload, complaints) => {
+  if (!insightsPayload) return computeInsights(complaints);
+
+  const summary = insightsPayload.summary || {};
+  const accountability = insightsPayload.accountability || {};
+  const satisfaction = insightsPayload.satisfaction || {};
+  const distribution = Array.isArray(insightsPayload.age_group_insights?.distribution)
+    ? insightsPayload.age_group_insights.distribution
+    : [];
+  const fallback = computeInsights(complaints) || {
+    total: 0,
+    categories: [],
+    ageGroups: { '15-30': 0, '30-60': 0, '60+': 0 },
+    urgencyCount: { critical: 0, high: 0, medium: 0, low: 0 },
+    pending: 0,
+    inProgress: 0,
+    escalated: 0,
+    resolved: 0,
+    satisfactionPct: 0,
+    topCategory: null,
+  };
+
+  const ageGroups = { '15-30': 0, '30-60': 0, '60+': 0 };
+  distribution.forEach((item) => {
+    const bucket = bucketAgeGroup(item.age_group);
+    if (bucket) ageGroups[bucket] += Number(item.count || 0);
+  });
+
+  const categories = Array.isArray(insightsPayload.issue_breakdown)
+    ? insightsPayload.issue_breakdown
+        .map((item) => ({
+          cat: item.category || 'other',
+          count: Number(item.count || 0),
+          pct: Math.round(Number(item.percentage || 0)),
+          color: CATEGORY_COLORS[item.category] || '#94a3b8',
+          label: CATEGORY_LABELS[item.category] || item.category || 'Other',
+        }))
+        .sort((a, b) => b.count - a.count)
+    : [];
+
+  return {
+    total: Number(summary.total_complaints || fallback.total || 0),
+    categories: categories.length ? categories : fallback.categories,
+    ageGroups: distribution.length ? ageGroups : fallback.ageGroups,
+    urgencyCount: buildUrgencyCount(Array.isArray(complaints) ? complaints : []),
+    pending: Number(summary.pending ?? fallback.pending ?? 0),
+    inProgress: Number(summary.in_progress ?? fallback.inProgress ?? 0),
+    escalated: Number(accountability.escalated_count ?? fallback.escalated ?? 0),
+    resolved: Number(summary.resolved ?? fallback.resolved ?? 0),
+    satisfactionPct: Math.round(Number(satisfaction.satisfaction_rate ?? fallback.satisfactionPct ?? 0)),
+    topCategory: categories[0] || fallback.topCategory || null,
+  };
+};
+
+const buildPieSlices = (data, total) => (
+  data.reduce(
+    (state, item) => {
+      const nextCount = state.runningCount + item.count;
+      const startAngle = (state.runningCount / total) * 2 * Math.PI - Math.PI / 2;
+      const endAngle = (nextCount / total) * 2 * Math.PI - Math.PI / 2;
+
+      return {
+        runningCount: nextCount,
+        slices: [...state.slices, { ...item, startAngle, endAngle }],
+      };
+    },
+    { runningCount: 0, slices: [] },
+  ).slices
+);
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function MetricCard({ dark, icon, label, value, sub, color = '#2563eb', isMobile }) {
@@ -163,13 +251,7 @@ function PieChart({ data, size = 180 }) {
   const total = data.reduce((s, d) => s + d.count, 0);
   if (total === 0) return null;
 
-  let cumulative = 0;
-  const slices = data.map((d) => {
-    const startAngle = (cumulative / total) * 2 * Math.PI - Math.PI / 2;
-    cumulative += d.count;
-    const endAngle = (cumulative / total) * 2 * Math.PI - Math.PI / 2;
-    return { ...d, startAngle, endAngle };
-  });
+  const slices = buildPieSlices(data, total);
 
   const r = size / 2 - 8;
   const cx = size / 2;
@@ -205,7 +287,7 @@ function PieChart({ data, size = 180 }) {
   );
 }
 
-function BarRow({ label, count, total, color, dark, pct }) {
+function BarRow({ label, count, color, dark, pct }) {
   const textSub = dark ? '#94a3b8' : '#64748b';
   const barBg = dark ? '#334155' : '#e2e8f0';
   const textMain = dark ? '#f1f5f9' : '#1e293b';
@@ -240,10 +322,15 @@ export default function LeaderInsightsPage({ dark, isMobile = false, tx }) {
 
   const border = dark ? '#334155' : '#e2e8f0';
   const surface = dark ? '#1e293b' : '#ffffff';
-  const sub = dark ? '#0f172a' : '#f8fafc';
   const textSub = dark ? '#94a3b8' : '#64748b';
   const textMain = dark ? '#f1f5f9' : '#1e293b';
   const sectionPad = isMobile ? '12px 10px' : '24px 30px';
+
+  const insightsQuery = useQuery({
+    queryKey: ['leader-insights', token],
+    queryFn: () => leaderAPI.insights(),
+    enabled: !!token,
+  });
 
   const assignedQuery = useQuery({
     queryKey: ['leader-complaints', token],
@@ -251,7 +338,10 @@ export default function LeaderInsightsPage({ dark, isMobile = false, tx }) {
     enabled: !!token,
   });
 
-  const insights = useMemo(() => computeInsights(assignedQuery.data || []), [assignedQuery.data]);
+  const insights = useMemo(
+    () => normalizeInsights(insightsQuery.data, assignedQuery.data || []),
+    [assignedQuery.data, insightsQuery.data],
+  );
 
   if (!token) {
     return (
@@ -266,7 +356,7 @@ export default function LeaderInsightsPage({ dark, isMobile = false, tx }) {
     );
   }
 
-  if (assignedQuery.isLoading) {
+  if (assignedQuery.isLoading || insightsQuery.isLoading) {
     return (
       <>
         <PageHeader dark={dark} isMobile={isMobile} title={tr('Insights', 'Maarifa')} subtitle={tr('Loading your analytics...', 'Inapakia takwimu zako...')} />
@@ -277,7 +367,7 @@ export default function LeaderInsightsPage({ dark, isMobile = false, tx }) {
     );
   }
 
-  if (assignedQuery.isError || !insights) {
+  if ((assignedQuery.isError && !assignedQuery.data) || !insights) {
     return (
       <>
         <PageHeader dark={dark} isMobile={isMobile} title={tr('Insights', 'Maarifa')} subtitle="" />

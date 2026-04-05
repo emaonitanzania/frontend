@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 
 const MOBILE_BREAKPOINT = 900;
 const LANGUAGE_KEY = 'emaoni_language';
@@ -23,7 +23,6 @@ const getInitialMobile = () => {
 };
 
 export default function Layout({ children }) {
-  const location = useLocation();
   const [dark, setDark] = useState(false);
   const [language, setLanguage] = useState(() => {
     if (typeof window === 'undefined') return 'en';
@@ -48,11 +47,6 @@ export default function Layout({ children }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    if (isMobile) {
-      setSidebarOpen(false);
-    }
-  }, [location.pathname, isMobile]);
 
   const toggleDark = () => setDark((prev) => !prev);
   const toggleLanguage = () => {
@@ -190,6 +184,9 @@ export default function Layout({ children }) {
             <NavLink
               key={path}
               to={path}
+              onClick={() => {
+                if (isMobile) setSidebarOpen(false);
+              }}
               style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',

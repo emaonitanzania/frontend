@@ -1,19 +1,38 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { complaintsAPI, getSessionId } from '../services/api';
 
 // InboxPage.jsx
 export function InboxPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
+  const queryClient = useQueryClient();
   const border = dark ? '#334155' : '#e2e8f0';
+  const surface = dark ? '#1e293b' : '#ffffff';
   const textSub = dark ? '#94a3b8' : '#64748b';
   const sessionId = useMemo(() => getSessionId(), []);
+  const [feedbackState, setFeedbackState] = useState({});
   const rowPadding = isMobile ? '14px 14px' : '18px 28px';
 
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ['complaints', 'inbox', sessionId],
     queryFn: () => complaintsAPI.inbox(sessionId),
     enabled: !!sessionId,
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: ({ complaintId, satisfied }) =>
+      complaintsAPI.feedback(
+        complaintId,
+        { satisfied_with_leader: satisfied },
+        sessionId,
+      ),
+    onSuccess: (_data, variables) => {
+      setFeedbackState((prev) => ({
+        ...prev,
+        [variables.complaintId]: variables.satisfied ? 'positive' : 'negative',
+      }));
+      queryClient.invalidateQueries({ queryKey: ['complaints', 'list', sessionId] });
+    },
   });
 
   return (
@@ -76,6 +95,61 @@ export function InboxPage({ dark, isMobile = false, tx }) {
                 </div>
                 <div style={{ fontSize: 13.5, fontWeight: m.unread ? 600 : 400, marginBottom: 2 }}>{m.subject}</div>
                 <div style={{ fontSize: 13, color: textSub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.preview}</div>
+                {m.badge !== 'AI' && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: textSub }}>
+                      {tr('Was this leader response helpful?', 'Je, jibu la kiongozi limekusaidia?')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        feedbackMutation.mutate({ complaintId: m.complaint_id, satisfied: true });
+                      }}
+                      disabled={feedbackMutation.isPending}
+                      style={{
+                        border: '1px solid #10b981',
+                        background: feedbackState[m.complaint_id] === 'positive' ? '#10b981' : surface,
+                        color: feedbackState[m.complaint_id] === 'positive' ? '#fff' : '#10b981',
+                        borderRadius: 999,
+                        padding: '5px 10px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: feedbackMutation.isPending ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {tr('Helpful', 'Limefaa')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        feedbackMutation.mutate({ complaintId: m.complaint_id, satisfied: false });
+                      }}
+                      disabled={feedbackMutation.isPending}
+                      style={{
+                        border: '1px solid #ef4444',
+                        background: feedbackState[m.complaint_id] === 'negative' ? '#ef4444' : surface,
+                        color: feedbackState[m.complaint_id] === 'negative' ? '#fff' : '#ef4444',
+                        borderRadius: 999,
+                        padding: '5px 10px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: feedbackMutation.isPending ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {tr('Needs work', 'Linahitaji maboresho')}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div
@@ -323,23 +397,15 @@ export function EscalationPage({ dark, isMobile = false, tx }) {
     enabled: !!sessionId,
   });
 
-  const complaints = complaintsQuery.data || [];
-
-  useEffect(() => {
-    if (!complaints.length) {
-      setSelectedComplaintId(null);
-      return;
-    }
-
-    if (!selectedComplaintId || !complaints.some((item) => item.id === selectedComplaintId)) {
-      setSelectedComplaintId(complaints[0].id);
-    }
-  }, [complaints, selectedComplaintId]);
+  const complaints = useMemo(() => complaintsQuery.data || [], [complaintsQuery.data]);
+  const effectiveSelectedComplaintId = complaints.some((item) => item.id === selectedComplaintId)
+    ? selectedComplaintId
+    : (complaints[0]?.id ?? null);
 
   const timelineQuery = useQuery({
-    queryKey: ['complaints', 'timeline', selectedComplaintId, sessionId],
-    queryFn: () => complaintsAPI.timeline(selectedComplaintId, sessionId),
-    enabled: !!sessionId && !!selectedComplaintId,
+    queryKey: ['complaints', 'timeline', effectiveSelectedComplaintId, sessionId],
+    queryFn: () => complaintsAPI.timeline(effectiveSelectedComplaintId, sessionId),
+    enabled: !!sessionId && !!effectiveSelectedComplaintId,
   });
 
   const levels = timelineQuery.data?.levels || [];
@@ -384,7 +450,7 @@ export function EscalationPage({ dark, isMobile = false, tx }) {
               >
                 <div style={{ fontWeight: 600, fontSize: 16 }}>{tr('Complaint Escalation Timeline', 'Ratiba ya Kupanda Ngazi ya Malalamiko')}</div>
                 <select
-                  value={selectedComplaintId || ''}
+                  value={effectiveSelectedComplaintId || ''}
                   onChange={(e) => setSelectedComplaintId(Number(e.target.value))}
                   style={{
                     padding: '8px 14px',
