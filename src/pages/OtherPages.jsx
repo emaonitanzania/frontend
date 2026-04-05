@@ -2,6 +2,38 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { complaintsAPI, getSessionId } from '../services/api';
 
+const HISTORY_TARGET_OPTIONS = [
+  { value: 'ward', label: 'Ward Councillor', labelSw: 'Diwani wa Kata' },
+  { value: 'district', label: 'District Commissioner', labelSw: 'Mkuu wa Wilaya' },
+  { value: 'regional', label: 'Regional Commissioner', labelSw: 'Mkuu wa Mkoa' },
+  { value: 'minister', label: 'Minister', labelSw: 'Waziri' },
+  { value: 'president', label: "President's Office", labelSw: 'Ofisi ya Rais' },
+];
+
+const HISTORY_CATEGORY_OPTIONS = [
+  { value: 'water', label: 'Water Services', labelSw: 'Huduma za Maji' },
+  { value: 'electricity', label: 'Electricity', labelSw: 'Umeme' },
+  { value: 'roads', label: 'Roads & Infrastructure', labelSw: 'Barabara na Miundombinu' },
+  { value: 'health', label: 'Health Services', labelSw: 'Huduma za Afya' },
+  { value: 'education', label: 'Education', labelSw: 'Elimu' },
+  { value: 'security', label: 'Security', labelSw: 'Usalama' },
+  { value: 'corruption', label: 'Corruption', labelSw: 'Rushwa' },
+  { value: 'housing', label: 'Housing', labelSw: 'Makazi' },
+  { value: 'sanitation', label: 'Sanitation', labelSw: 'Usafi' },
+  { value: 'transportation', label: 'Transportation', labelSw: 'Usafiri' },
+  { value: 'other', label: 'Other', labelSw: 'Nyingine' },
+];
+
+const HISTORY_STATUS_LABELS = {
+  submitted: { en: 'Submitted', sw: 'Imewasilishwa' },
+  ai_responded: { en: 'AI Responded', sw: 'AI Imejibu' },
+  pending: { en: 'Pending', sw: 'Inasubiri' },
+  in_progress: { en: 'In Progress', sw: 'Inaendelea' },
+  escalated: { en: 'Escalated', sw: 'Imepandishwa' },
+  resolved: { en: 'Resolved', sw: 'Imetatuliwa' },
+  closed: { en: 'Closed', sw: 'Imefungwa' },
+};
+
 // InboxPage.jsx
 export function InboxPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
@@ -299,16 +331,92 @@ export function UnrepliedPage({ dark, isMobile = false, tx }) {
 // HistoryPage.jsx
 export function HistoryPage({ dark, isMobile = false, tx }) {
   const tr = (en, sw) => (tx ? tx(en, sw) : en);
+  const queryClient = useQueryClient();
   const border = dark ? '#334155' : '#e2e8f0';
+  const surface = dark ? '#1e293b' : '#ffffff';
   const textSub = dark ? '#94a3b8' : '#64748b';
   const sessionId = useMemo(() => getSessionId(), []);
   const rowPadding = isMobile ? '14px 14px' : '18px 28px';
+  const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+  const [historyForm, setHistoryForm] = useState(null);
+  const [historyNotice, setHistoryNotice] = useState('');
+  const [historyNoticeType, setHistoryNoticeType] = useState('success');
 
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ['complaints', 'history', sessionId],
     queryFn: () => complaintsAPI.history(sessionId),
     enabled: !!sessionId,
   });
+
+  const detailQuery = useQuery({
+    queryKey: ['complaints', 'history-detail', selectedHistoryId, sessionId],
+    queryFn: () => complaintsAPI.get(selectedHistoryId, sessionId),
+    enabled: !!sessionId && !!selectedHistoryId,
+  });
+  const detailDraft = useMemo(
+    () => (detailQuery.data ? buildHistoryDraft(detailQuery.data) : null),
+    [detailQuery.data],
+  );
+  const activeHistoryForm = historyForm || detailDraft;
+
+  const resendMutation = useMutation({
+    mutationFn: async (draft) => {
+      if (!draft) {
+        throw new Error('No history draft available.');
+      }
+      if (draft.type === 'letter') {
+        return complaintsAPI.createLetter(buildLetterResendPayload(draft, sessionId));
+      }
+      return complaintsAPI.create(buildMessageResendPayload(draft, sessionId));
+    },
+    onSuccess: (response, draft) => {
+      queryClient.invalidateQueries({ queryKey: ['complaints'] });
+      setHistoryNoticeType('success');
+      setHistoryNotice(
+        tr(
+          `${draft.type === 'letter' ? 'Letter' : 'Message'} resent successfully. New reference ID: #${response.id}.`,
+          `${draft.type === 'letter' ? 'Barua' : 'Ujumbe'} umetumwa tena kwa mafanikio. Namba mpya ya rejea: #${response.id}.`,
+        ),
+      );
+      setSelectedHistoryId(null);
+      setHistoryForm(null);
+    },
+    onError: () => {
+      setHistoryNoticeType('error');
+      setHistoryNotice(
+        tr(
+          'Unable to resend this history item right now. Please review the details and try again.',
+          'Imeshindikana kutuma tena item hii ya historia kwa sasa. Tafadhali hakiki taarifa kisha jaribu tena.',
+        ),
+      );
+    },
+  });
+
+  const normalizedPostcode = normalizeHistoryPostcode(activeHistoryForm?.postcode || '');
+  const hasInvalidPostcode = !!activeHistoryForm?.postcode && normalizedPostcode.length !== 5;
+  const canResend = Boolean(
+    activeHistoryForm
+    && activeHistoryForm.text.trim()
+    && (activeHistoryForm.location.trim() || normalizedPostcode)
+    && !hasInvalidPostcode
+    && (
+      activeHistoryForm.type !== 'letter'
+      || (
+        activeHistoryForm.subject.trim()
+        && activeHistoryForm.senderPoBox.trim()
+        && parseReceiverPoBoxes(activeHistoryForm.receiverPoBoxes).length > 0
+      )
+    ),
+  );
+
+  const closeHistoryModal = () => {
+    setSelectedHistoryId(null);
+    setHistoryForm(null);
+  };
+
+  const updateHistoryField = (field, value) => {
+    setHistoryForm((prev) => ({ ...(prev || detailDraft || {}), [field]: value }));
+  };
 
   return (
     <>
@@ -319,6 +427,21 @@ export function HistoryPage({ dark, isMobile = false, tx }) {
         subtitle={tr('All messages and letters you have sent', 'Ujumbe na barua zote ulizotuma')}
       />
       <div style={{ flex: 1, overflowY: 'auto' }}>
+        {historyNotice && (
+          <div
+            style={{
+              margin: isMobile ? '12px 12px 0' : '18px 24px 0',
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: `1px solid ${historyNoticeType === 'error' ? '#fecaca' : '#bbf7d0'}`,
+              background: historyNoticeType === 'error' ? (dark ? '#3f1d1d' : '#fef2f2') : (dark ? '#142c1f' : '#f0fdf4'),
+              color: historyNoticeType === 'error' ? '#ef4444' : '#16a34a',
+              fontSize: 13.5,
+            }}
+          >
+            {historyNotice}
+          </div>
+        )}
         {!sessionId && <StateBlock dark={dark} label={tr('No active session found. Send a message first.', 'Hakuna sesi hai. Tuma ujumbe kwanza.')} />}
         {sessionId && isLoading && <StateBlock dark={dark} label={tr('Loading history...', 'Inapakia historia...')} />}
         {sessionId && isError && <StateBlock dark={dark} label={tr('Unable to load history.', 'Imeshindwa kupakia historia.')} isError />}
@@ -337,6 +460,11 @@ export function HistoryPage({ dark, isMobile = false, tx }) {
               gap: isMobile ? 8 : 0,
               cursor: 'pointer',
               transition: 'background 0.15s',
+            }}
+            onClick={() => {
+              setHistoryNotice('');
+              setHistoryForm(null);
+              setSelectedHistoryId(item.id);
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = dark ? '#334155' : '#f8fafc';
@@ -371,12 +499,379 @@ export function HistoryPage({ dark, isMobile = false, tx }) {
                 <div style={{ fontSize: 13, color: textSub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {item.text}
                 </div>
+                <div style={{ fontSize: 12, color: textSub, marginTop: 4 }}>
+                  {formatHistoryStatus(item.status, tr)} | {item.location}
+                  {item.postcode ? ` • ${item.postcode}` : ''}
+                </div>
               </div>
             </div>
             <div style={{ fontSize: 12, color: textSub, flexShrink: 0, marginLeft: isMobile ? 0 : 16 }}>{item.date}</div>
           </div>
         ))}
       </div>
+
+      {selectedHistoryId && (
+        <div
+          onClick={closeHistoryModal}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            display: 'flex',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: 'center',
+            padding: isMobile ? 0 : 24,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 860,
+              height: isMobile ? '100%' : 'min(88vh, 820px)',
+              background: surface,
+              borderRadius: isMobile ? 0 : 16,
+              border: `1px solid ${border}`,
+              boxShadow: '0 30px 60px rgba(15, 23, 42, 0.22)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: isMobile ? '14px 14px 12px' : '18px 24px 16px',
+                borderBottom: `1px solid ${border}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600 }}>
+                  {tr('History Details', 'Maelezo ya Historia')}
+                </div>
+                <div style={{ fontSize: 13, color: textSub, marginTop: 4 }}>
+                  {tr('View, edit, and resend this item without changing the original record.', 'Tazama, hariri, na tuma tena item hii bila kubadilisha kumbukumbu ya mwanzo.')}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeHistoryModal}
+                style={{
+                  border: `1px solid ${border}`,
+                  background: 'transparent',
+                  color: dark ? '#f8fafc' : '#1e293b',
+                  borderRadius: 999,
+                  width: 34,
+                  height: 34,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
+              {detailQuery.isLoading && <StateBlock dark={dark} label={tr('Loading history details...', 'Inapakia maelezo ya historia...')} />}
+              {detailQuery.isError && <StateBlock dark={dark} label={tr('Unable to load this history item.', 'Imeshindwa kupakia item hii ya historia.')} isError />}
+
+              {!detailQuery.isLoading && !detailQuery.isError && activeHistoryForm && (
+                <>
+                  {historyNotice && selectedHistoryId && (
+                    <div
+                      style={{
+                        marginBottom: 16,
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        border: `1px solid ${historyNoticeType === 'error' ? '#fecaca' : '#bbf7d0'}`,
+                        background: historyNoticeType === 'error' ? (dark ? '#3f1d1d' : '#fef2f2') : (dark ? '#142c1f' : '#f0fdf4'),
+                        color: historyNoticeType === 'error' ? '#ef4444' : '#16a34a',
+                        fontSize: 13.5,
+                      }}
+                    >
+                      {historyNotice}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, minmax(0, 1fr))',
+                      gap: 10,
+                      marginBottom: 18,
+                    }}
+                  >
+                    <HistoryStatCard dark={dark} label={tr('Reference', 'Rejea')} value={`#${activeHistoryForm.id}`} />
+                    <HistoryStatCard dark={dark} label={tr('Type', 'Aina')} value={activeHistoryForm.type === 'letter' ? tr('Letter', 'Barua') : tr('Message', 'Ujumbe')} />
+                    <HistoryStatCard dark={dark} label={tr('Status', 'Hali')} value={formatHistoryStatus(activeHistoryForm.status, tr)} />
+                    <HistoryStatCard dark={dark} label={tr('Current Leader', 'Kiongozi wa Sasa')} value={activeHistoryForm.assignedTo || tr('Unassigned', 'Hajatengwa')} />
+                  </div>
+
+                  <div
+                    style={{
+                      background: dark ? '#0f172a' : '#f8fafc',
+                      border: `1px solid ${border}`,
+                      borderRadius: 12,
+                      padding: isMobile ? 12 : 16,
+                      marginBottom: 18,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>{tr('Original timeline', 'Mfuatano wa asili')}</div>
+                    <div style={{ fontSize: 13, color: textSub }}>
+                      {tr('Submitted', 'Imetumwa')}: {formatHistoryDateTime(activeHistoryForm.submittedAt)}<br />
+                      {tr('Location', 'Eneo')}: {activeHistoryForm.location || tr('Unspecified', 'Haijabainishwa')}
+                      {activeHistoryForm.postcode ? ` • ${activeHistoryForm.postcode}` : ''}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                      gap: 14,
+                      marginBottom: 14,
+                    }}
+                  >
+                    <FormField label={tr('Send To', 'Tuma Kwa')}>
+                      <select
+                        value={activeHistoryForm.target}
+                        onChange={(event) => updateHistoryField('target', event.target.value)}
+                        style={buildHistoryInputStyle(dark, border)}
+                      >
+                        {HISTORY_TARGET_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {tr(option.label, option.labelSw)}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+
+                    <FormField label={tr('Category', 'Kategoria')}>
+                      <select
+                        value={activeHistoryForm.category}
+                        onChange={(event) => updateHistoryField('category', event.target.value)}
+                        style={buildHistoryInputStyle(dark, border)}
+                      >
+                        {HISTORY_CATEGORY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {tr(option.label, option.labelSw)}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+
+                    <FormField label={tr('Location', 'Location')}>
+                      <input
+                        value={activeHistoryForm.location}
+                        onChange={(event) => updateHistoryField('location', event.target.value)}
+                        style={buildHistoryInputStyle(dark, border)}
+                        placeholder={tr('Example: Ubungo, Dar es Salaam', 'Mfano: Ubungo, Dar es Salaam')}
+                      />
+                    </FormField>
+
+                    <FormField label={tr('Postcode', 'Postcode')}>
+                      <input
+                        value={activeHistoryForm.postcode}
+                        onChange={(event) => updateHistoryField('postcode', event.target.value.replace(/[^\d]/g, '').slice(0, 5))}
+                        style={buildHistoryInputStyle(dark, border)}
+                        inputMode="numeric"
+                        maxLength={5}
+                        placeholder="41202"
+                      />
+                      {hasInvalidPostcode && (
+                        <div style={{ color: '#ef4444', fontSize: 12, marginTop: 6 }}>
+                          {tr('Postcode must have 5 digits.', 'Postcode lazima iwe na tarakimu 5.')}
+                        </div>
+                      )}
+                    </FormField>
+                  </div>
+
+                  {activeHistoryForm.type === 'letter' && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                        gap: 14,
+                        marginBottom: 14,
+                      }}
+                    >
+                      <FormField label={tr('Sender P.O. Box', 'S.L.P ya Mtumaji')}>
+                        <input
+                          value={activeHistoryForm.senderPoBox}
+                          onChange={(event) => updateHistoryField('senderPoBox', event.target.value)}
+                          style={buildHistoryInputStyle(dark, border)}
+                        />
+                      </FormField>
+
+                      <FormField label={tr('Receiver P.O. Boxes', 'S.L.P za Mpokeaji')}>
+                        <textarea
+                          value={activeHistoryForm.receiverPoBoxes}
+                          onChange={(event) => updateHistoryField('receiverPoBoxes', event.target.value)}
+                          style={buildHistoryTextareaStyle(dark, border, 92)}
+                          placeholder={tr('One PO Box per line', 'Weka S.L.P moja kwa kila mstari')}
+                        />
+                      </FormField>
+                    </div>
+                  )}
+
+                  {activeHistoryForm.type !== 'letter' && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                        gap: 14,
+                        marginBottom: 14,
+                      }}
+                    >
+                      <FormField label={tr('Age Group', 'Rika')}>
+                        <input
+                          value={activeHistoryForm.ageGroup}
+                          onChange={(event) => updateHistoryField('ageGroup', event.target.value)}
+                          style={buildHistoryInputStyle(dark, border)}
+                          placeholder={tr('Example: 18-25', 'Mfano: 18-25')}
+                        />
+                      </FormField>
+
+                      <FormField label={tr('Topic', 'Mada')}>
+                        <input
+                          value={activeHistoryForm.topic}
+                          onChange={(event) => updateHistoryField('topic', event.target.value)}
+                          style={buildHistoryInputStyle(dark, border)}
+                          placeholder={tr('Example: ajira, elimu', 'Mfano: ajira, elimu')}
+                        />
+                      </FormField>
+                    </div>
+                  )}
+
+                  <FormField label={activeHistoryForm.type === 'letter' ? tr('Subject', 'Kichwa cha Barua') : tr('Subject / Title', 'Kichwa / Title')}>
+                    <input
+                      value={activeHistoryForm.subject}
+                      onChange={(event) => updateHistoryField('subject', event.target.value)}
+                      style={buildHistoryInputStyle(dark, border)}
+                      placeholder={tr('Short summary', 'Muhtasari mfupi')}
+                    />
+                  </FormField>
+
+                  <div style={{ marginTop: 14 }}>
+                    <FormField label={activeHistoryForm.type === 'letter' ? tr('Letter Body', 'Mwili wa Barua') : tr('Message / Complaint', 'Ujumbe / Malalamiko')}>
+                      <textarea
+                        value={activeHistoryForm.text}
+                        onChange={(event) => updateHistoryField('text', event.target.value)}
+                        style={buildHistoryTextareaStyle(dark, border, isMobile ? 180 : 220)}
+                        placeholder={tr('Edit the content before resending', 'Hariri maudhui kabla ya kutuma tena')}
+                      />
+                    </FormField>
+                  </div>
+
+                  {Array.isArray(activeHistoryForm.attachments) && activeHistoryForm.attachments.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 18,
+                        background: dark ? '#0f172a' : '#f8fafc',
+                        border: `1px solid ${border}`,
+                        borderRadius: 12,
+                        padding: isMobile ? 12 : 16,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: 8 }}>{tr('Attachments', 'Viambatisho')}</div>
+                      <div style={{ fontSize: 12.5, color: textSub, marginBottom: 10 }}>
+                        {tr('These are shown for reference only. Resend uses the edited text fields above.', 'Hivi vinaonyeshwa kwa marejeo tu. Kutuma tena kutatumia maandishi yaliyohaririwa hapo juu.')}
+                      </div>
+                      {activeHistoryForm.attachments.map((attachment) => (
+                        <div key={attachment.id} style={{ fontSize: 13, color: dark ? '#e2e8f0' : '#334155', marginBottom: 6 }}>
+                          {attachment.filename}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      marginTop: 18,
+                      background: dark ? '#0f172a' : '#f8fafc',
+                      border: `1px solid ${border}`,
+                      borderRadius: 12,
+                      padding: isMobile ? 12 : 16,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 10 }}>{tr('Responses', 'Majibu')}</div>
+                    {activeHistoryForm.responses.length === 0 && (
+                      <div style={{ fontSize: 13, color: textSub }}>
+                        {tr('No responses have been recorded for this item yet.', 'Bado hakuna majibu yaliyorekodiwa kwa item hii.')}
+                      </div>
+                    )}
+                    {activeHistoryForm.responses.map((response) => (
+                      <div
+                        key={response.id}
+                        style={{
+                          borderTop: `1px solid ${border}`,
+                          paddingTop: 10,
+                          marginTop: 10,
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 600, fontSize: 13.5 }}>{response.responder_name}</div>
+                          <div style={{ fontSize: 12, color: textSub }}>{formatHistoryDateTime(response.timestamp)}</div>
+                        </div>
+                        <div style={{ fontSize: 13, color: textSub, marginTop: 5, lineHeight: 1.65 }}>
+                          {response.response_text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div
+              style={{
+                borderTop: `1px solid ${border}`,
+                padding: isMobile ? 14 : 18,
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                type="button"
+                onClick={closeHistoryModal}
+                style={{
+                  border: `1px solid ${border}`,
+                  background: 'transparent',
+                  color: dark ? '#f8fafc' : '#334155',
+                  borderRadius: 8,
+                  padding: '10px 16px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                {tr('Close', 'Funga')}
+              </button>
+              <button
+                type="button"
+                onClick={() => resendMutation.mutate({ ...activeHistoryForm, postcode: normalizedPostcode })}
+                disabled={!canResend || resendMutation.isPending}
+                style={{
+                  border: 'none',
+                  background: !canResend || resendMutation.isPending ? '#94a3b8' : '#2563eb',
+                  color: '#fff',
+                  borderRadius: 8,
+                  padding: '10px 16px',
+                  cursor: !canResend || resendMutation.isPending ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                {resendMutation.isPending ? tr('Resending...', 'Inatuma tena...') : tr('Resend Edited Copy', 'Tuma Tena Nakala Iliyohaririwa')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -669,6 +1164,152 @@ export function FAQsPage({ dark, isMobile = false, language = 'en', tx }) {
         ))}
       </div>
     </>
+  );
+}
+
+function normalizeHistoryPostcode(value) {
+  return String(value || '').replace(/[^\d]/g, '').slice(0, 5);
+}
+
+function normalizeHistoryTarget(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  const mapping = {
+    ward: 'ward',
+    district: 'district',
+    regional: 'regional',
+    minister: 'minister',
+    ministerial: 'minister',
+    president: 'president',
+    presidential: 'president',
+  };
+  return mapping[raw] || 'ward';
+}
+
+function parseReceiverPoBoxes(value) {
+  return String(value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildHistoryDraft(detail) {
+  const metadata = detail?.metadata || {};
+  const letter = metadata?.letter || {};
+  return {
+    id: detail.id,
+    type: metadata.type || 'message',
+    status: detail.status || '',
+    assignedTo: detail.assigned_to_leader || '',
+    submittedAt: detail.submitted_at || '',
+    target: normalizeHistoryTarget(metadata.target || metadata.send_to || detail.leader_level),
+    subject: letter.subject || detail.title || '',
+    text: letter.body || detail.description || '',
+    location: detail.location || '',
+    postcode: detail.postcode || '',
+    category: detail.category || 'other',
+    senderPoBox: letter.sender_po_box || '',
+    receiverPoBoxes: Array.isArray(letter.receiver_po_boxes) ? letter.receiver_po_boxes.join('\n') : '',
+    ageGroup: metadata.age_group || '',
+    topic: metadata.topic || '',
+    attachments: Array.isArray(detail.attachments) ? detail.attachments : [],
+    responses: Array.isArray(detail.responses) ? detail.responses : [],
+  };
+}
+
+function buildMessageResendPayload(draft, sessionId) {
+  return {
+    session_id: sessionId,
+    title: draft.subject.trim(),
+    description: draft.text.trim(),
+    category: draft.category || 'other',
+    location: draft.location.trim(),
+    postcode: normalizeHistoryPostcode(draft.postcode),
+    send_to: draft.target,
+    age_group: draft.ageGroup.trim(),
+    topic: draft.topic.trim(),
+    metadata: {
+      type: 'message',
+      resend_from: draft.id,
+    },
+  };
+}
+
+function buildLetterResendPayload(draft, sessionId) {
+  return {
+    session_id: sessionId,
+    sender_po_box: draft.senderPoBox.trim(),
+    receiver_po_boxes: parseReceiverPoBoxes(draft.receiverPoBoxes),
+    subject: draft.subject.trim(),
+    body: draft.text.trim(),
+    send_to: draft.target,
+    location: draft.location.trim(),
+    postcode: normalizeHistoryPostcode(draft.postcode),
+    category: draft.category || 'other',
+  };
+}
+
+function formatHistoryStatus(status, tr) {
+  const label = HISTORY_STATUS_LABELS[status];
+  return label ? tr(label.en, label.sw) : status || tr('Unknown', 'Haijulikani');
+}
+
+function formatHistoryDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function buildHistoryInputStyle(dark, border) {
+  return {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: 8,
+    border: `1px solid ${border}`,
+    background: dark ? '#0f172a' : '#ffffff',
+    color: dark ? '#f8fafc' : '#1e293b',
+    fontSize: 14,
+    outline: 'none',
+  };
+}
+
+function buildHistoryTextareaStyle(dark, border, minHeight) {
+  return {
+    ...buildHistoryInputStyle(dark, border),
+    minHeight,
+    resize: 'vertical',
+    lineHeight: 1.6,
+  };
+}
+
+function HistoryStatCard({ dark, label, value }) {
+  return (
+    <div
+      style={{
+        background: dark ? '#0f172a' : '#f8fafc',
+        border: `1px solid ${dark ? '#334155' : '#e2e8f0'}`,
+        borderRadius: 12,
+        padding: '12px 14px',
+      }}
+    >
+      <div style={{ fontSize: 11.5, color: dark ? '#94a3b8' : '#64748b', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontWeight: 600, fontSize: 13.5 }}>{value}</div>
+    </div>
+  );
+}
+
+function FormField({ label, children }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 7 }}>{label}</div>
+      {children}
+    </label>
   );
 }
 

@@ -291,7 +291,8 @@ export const chatAPI = {
 
 export const complaintsAPI = {
   create: async (data) => {
-    const res = await api.post('/complaints/', data, buildPayloadConfig(data));
+    const payload = normalizeRoutingPayload(data);
+    const res = await api.post('/complaints/', payload, buildPayloadConfig(payload));
     return res.data;
   },
   list: async (sessionId) => {
@@ -323,7 +324,8 @@ export const complaintsAPI = {
     return res.data;
   },
   createLetter: async (data) => {
-    const res = await api.post('/complaints/letters/', normalizeRoutingPayload(data));
+    const payload = normalizeRoutingPayload(data);
+    const res = await api.post('/complaints/letters/', payload);
     return res.data;
   },
   feedback: async (id, data, sessionId) => {
